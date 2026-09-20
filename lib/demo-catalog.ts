@@ -1,0 +1,63 @@
+import type { MixTrack } from "@/lib/types";
+
+type DemoSeed = [name: string, artist: string, genre: string, energy: number];
+
+const seeds: DemoSeed[] = [
+  ["Massive", "Drake", "house", 0.78], ["Sticky", "Drake", "house", 0.76],
+  ["Texts Go Green", "Drake", "house", 0.58], ["Flight's Booked", "Drake", "house", 0.54],
+  ["A Keeper", "Drake", "house", 0.65], ["Calling My Name", "Drake", "house", 0.8],
+  ["Overdrive", "Drake", "house", 0.7], ["Tie That Binds", "Drake", "house", 0.68],
+  ["Passionfruit", "Drake", "r&b", 0.5], ["Jungle", "Drake", "r&b", 0.35],
+  ["Feel No Ways", "Drake", "r&b", 0.62], ["Hours In Silence", "Drake", "r&b", 0.3],
+  ["Good Days", "SZA", "r&b", 0.35], ["Snooze", "SZA", "r&b", 0.32],
+  ["Saturn", "SZA", "r&b", 0.28], ["Broken Clocks", "SZA", "r&b", 0.5],
+  ["Garden (Say It Like Dat)", "SZA", "r&b", 0.38], ["Drew Barrymore", "SZA", "r&b", 0.34],
+  ["The Weekend", "SZA", "r&b", 0.45], ["Love Galore", "SZA", "r&b", 0.52],
+  ["After Hours", "The Weeknd", "r&b", 0.46], ["Pink + White", "Frank Ocean", "r&b", 0.36],
+  ["Japanese Denim", "Daniel Caesar", "r&b", 0.26], ["Get You", "Daniel Caesar", "r&b", 0.31],
+  ["Come Through and Chill", "Miguel", "r&b", 0.42], ["Damage", "H.E.R.", "r&b", 0.34],
+  ["Focus", "H.E.R.", "r&b", 0.25], ["Clouded", "Brent Faiyaz", "r&b", 0.33],
+  ["Rehab (Winter in Paris)", "Brent Faiyaz", "r&b", 0.27], ["Girl", "The Internet", "r&b", 0.41],
+  ["Midnight City", "M83", "indie", 0.7], ["Space Song", "Beach House", "indie", 0.22],
+  ["The Night We Met", "Lord Huron", "indie", 0.2], ["Drive", "The Paper Kites", "indie", 0.26],
+  ["A Moment Apart", "ODESZA", "electronic", 0.55], ["Myth", "Beach House", "indie", 0.3],
+  ["Apocalypse", "Cigarettes After Sex", "indie", 0.24], ["Show Me How", "Men I Trust", "indie", 0.28],
+  ["Bags", "Clairo", "indie", 0.42], ["Sofia", "Clairo", "indie", 0.65],
+  ["GHOST", "Yel", "indie", 0.25], ["Fade Into You", "Mazzy Star", "indie", 0.2],
+  ["Holocene", "Bon Iver", "indie", 0.18], ["Moon Song", "Phoebe Bridgers", "indie", 0.15],
+  ["Nights", "Frank Ocean", "r&b", 0.55], ["Super Rich Kids", "Frank Ocean", "r&b", 0.48],
+  ["Sweet Life", "Frank Ocean", "r&b", 0.53], ["Lost", "Frank Ocean", "r&b", 0.62],
+  ["Lite Spots", "KAYTRANADA", "house", 0.72], ["You're The One", "KAYTRANADA", "house", 0.68],
+  ["10%", "KAYTRANADA", "house", 0.73], ["Intimidated", "KAYTRANADA", "house", 0.61],
+  ["Glue", "Bicep", "house", 0.66], ["Apricots", "Bicep", "house", 0.7],
+  ["Innerbloom", "RÜFÜS DU SOL", "house", 0.58], ["Tadow", "Masego & FKJ", "jazz", 0.48],
+  ["C U Girl", "Steve Lacy", "indie", 0.44], ["Dark Red", "Steve Lacy", "indie", 0.5],
+  ["Time Moves Slow", "BADBADNOTGOOD", "jazz", 0.24], ["Friday Morning", "Khruangbin", "indie", 0.3],
+  ["Texas Sun", "Khruangbin", "indie", 0.38], ["Them Changes", "Thundercat", "funk", 0.55],
+  ["Borderline", "Tame Impala", "indie", 0.61], ["Eventually", "Tame Impala", "indie", 0.43],
+  ["Sunset Lover", "Petit Biscuit", "electronic", 0.42], ["Kerala", "Bonobo", "electronic", 0.58],
+  ["Tieduprightnow", "Parcels", "funk", 0.66], ["Sweet Disposition", "The Temper Trap", "indie", 0.63],
+  ["Electric Feel", "MGMT", "indie", 0.66], ["Something About Us", "Daft Punk", "electronic", 0.3],
+  ["Lady (Hear Me Tonight)", "Modjo", "house", 0.72], ["Music Sounds Better With You", "Stardust", "house", 0.74],
+  ["You & Me (Flume Remix)", "Disclosure", "house", 0.82], ["Latch", "Disclosure", "house", 0.75],
+  ["White Noise", "Disclosure", "house", 0.78], ["Losing It", "FISHER", "house", 0.9],
+  ["Move Your Body", "Marshall Jefferson", "house", 0.84], ["Finally", "Kings of Tomorrow", "house", 0.64],
+  ["Best Part", "Daniel Caesar", "r&b", 0.23], ["Poison", "Brent Faiyaz", "r&b", 0.36],
+  ["Open Arms", "SZA", "r&b", 0.25], ["Crew Love", "Drake", "r&b", 0.44],
+  ["Teenage Fever", "Drake", "r&b", 0.4], ["Virginia Beach", "Drake", "r&b", 0.38],
+];
+
+const familiarArtists = new Set(["Drake", "SZA", "Frank Ocean", "The Weeknd", "Daniel Caesar", "Tame Impala"]);
+
+export const demoCatalog: MixTrack[] = seeds.map(([name, artist, genre, energy], index) => ({
+  id: `demo-${index + 1}`,
+  name,
+  artists: artist.split(" & "),
+  album: index < 9 ? "Honestly, Nevermind" : "Curated catalogue",
+  durationMs: 168000 + ((index * 17) % 145) * 1000,
+  source: "demo",
+  familiar: familiarArtists.has(artist),
+  genres: [genre],
+  energy,
+  danceability: Math.min(0.96, energy + (genre === "house" ? 0.14 : 0.04)),
+}));
