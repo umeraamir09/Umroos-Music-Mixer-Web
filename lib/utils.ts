@@ -10,6 +10,24 @@ export function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+export async function mapConcurrent<T, R>(items: T[], concurrency: number, operation: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failed = false;
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (!failed && next < items.length) {
+      const index = next++;
+      try {
+        results[index] = await operation(items[index], index);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  }));
+  return results;
+}
+
 export function dedupeBy<T>(items: T[], key: (item: T) => string): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {

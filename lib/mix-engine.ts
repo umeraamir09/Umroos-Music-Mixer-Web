@@ -11,7 +11,7 @@ export async function generateMix(prompt: string, session: SpotifySession | null
   const candidates = session ? await getTasteCandidates(session, plan) : demoCatalog;
   const { tracks: scored, jevEvaluated } = await scoreCandidates(candidates, plan, prompt);
   const tracks = chooseTracks(scored, plan, prompt);
-  if (!tracks.length) throw new Error("No available tracks matched this request. Try a different artist or a broader prompt.");
+  if (!tracks.length) throw new Error("No tracks could be verified as a match for this request. Please retry or describe the sound in more detail.");
   const cover = await createCover(plan);
   const familiar = tracks.filter((track) => track.familiar).length;
   return {

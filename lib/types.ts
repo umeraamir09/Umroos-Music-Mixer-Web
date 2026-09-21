@@ -12,6 +12,8 @@ export type MixPlan = {
   // Empty means unrestricted. Otherwise every track must credit an allowed artist.
   allowedArtists: string[];
   seedTracks: string[];
+  referenceTracks: { name: string; artist: string }[];
+  soundProfile: string;
   avoidArtists: string[];
   avoidTraits: string[];
   familiarityTarget: number;
@@ -38,6 +40,7 @@ export type MixTrack = {
   fitProbability?: number;
   // Explicit Jev rejection must survive selection and backfilling.
   meetsRequest?: boolean;
+  fitSource?: "jev" | "local";
 };
 
 export type MixRecord = {

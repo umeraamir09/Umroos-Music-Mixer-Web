@@ -17,5 +17,5 @@ it("generates a shorter Drake-only mix end to end without AI services", async ()
 it("reports no matches instead of padding a restricted request with other artists", async () => {
   vi.stubEnv("DEEPSEEK_BASE_URL", "");
   vi.stubEnv("AI_GATEWAY_API_KEY", "");
-  await expect(generateMix("Bad Bunny only", null)).rejects.toThrow("No available tracks matched this request");
+  await expect(generateMix("Bad Bunny only", null)).rejects.toThrow("No tracks could be verified as a match");
 });

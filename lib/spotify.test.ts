@@ -65,7 +65,7 @@ describe("request-led candidate retrieval", () => {
           : [catalogTrack("match-10"), catalogTrack("unrelated-result", "Drake Tribute Band")],
         next: offset === 0 ? "next-page" : null } });
       }
-      if (url.pathname === "/v1/me/top/tracks") return json({ items: [catalogTrack("unrelated-taste", "SZA"), catalogTrack("match-0")] });
+      if (url.pathname === "/v1/me/tracks") return json({ items: [catalogTrack("unrelated-taste", "SZA"), catalogTrack("match-0")].map((track) => ({ track })), total: 2 });
       if (url.pathname === "/v1/audio-features") return json({ audio_features: [] });
       return json({ items: [] });
     });
@@ -77,18 +77,44 @@ describe("request-led candidate retrieval", () => {
     expect(candidates.find((track) => track.id === "match-10")?.familiar).toBe(false);
     expect(fetchMock.mock.calls.filter(([url]) => url.includes("/search?"))).toHaveLength(2);
   });
-  it("does not let a large taste history crowd requested discoveries out", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+  it("retains old liked songs and requested discoveries without browsing other taste sources", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
       const url = new URL(input);
       if (url.pathname === "/v1/search") return json({ tracks: { items: [catalogTrack("requested-discovery")], next: null } });
-      if (url.pathname === "/v1/me/top/tracks") return json({ items: Array.from({ length: 50 }, (_, i) => catalogTrack(`${url.searchParams.get("time_range")}-${i}`, "SZA")) });
-      if (url.pathname === "/v1/me/tracks") return json({ items: Array.from({ length: 50 }, (_, i) => ({ track: catalogTrack(`saved-${i}`, "SZA") })) });
+      if (url.pathname === "/v1/me/tracks") {
+        const offset = Number(url.searchParams.get("offset"));
+        return json({ items: Array.from({ length: 50 }, (_, i) => ({ track: catalogTrack(`saved-${offset + i}`, "SZA") })), total: 500 });
+      }
       if (url.pathname === "/v1/audio-features") return json({ audio_features: [] });
       return json({ items: [] });
-    }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
     const candidates = await getTasteCandidates(session, { ...fallbackPlan("club"), searchQueries: ["club"] });
-    expect(candidates).toHaveLength(180);
+    expect(candidates).toHaveLength(501);
     expect(candidates[0].id).toBe("requested-discovery");
     expect(candidates[0].familiar).toBe(false);
+    expect(candidates.find((track) => track.id === "saved-499")).toMatchObject({ familiar: true, source: "saved" });
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(url).pathname === "/v1/me/tracks")).toHaveLength(10);
+    expect(fetchMock.mock.calls.some(([url]) => /top\/tracks|recently-played|playlists/.test(url))).toBe(false);
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes("/audio-features"))).toHaveLength(1);
+  });
+  it("fails visibly when an older liked-song page is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = new URL(input);
+      if (url.pathname === "/v1/me/tracks") return url.searchParams.get("offset") === "0"
+        ? json({ items: [], total: 100 }) : new Response("rate limited", { status: 429 });
+      return json({ tracks: { items: [], next: null } });
+    }));
+    await expect(getTasteCandidates(session, fallbackPlan("indie"))).rejects.toThrow("Could not read your complete Liked Songs library");
+  });
+  it("skips unavailable, local and removed likes without losing valid older tracks", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      const url = new URL(input);
+      if (url.pathname === "/v1/me/tracks") return json({ total: 5, items: [null, { ...catalogTrack("local"), is_local: true }, { ...catalogTrack("unavailable"), is_playable: false }, catalogTrack("valid"), catalogTrack("valid")].map((track) => ({ track })) });
+      if (url.pathname === "/v1/audio-features") return json({ audio_features: [] });
+      return json({ tracks: { items: [], next: null } });
+    }));
+    const candidates = await getTasteCandidates(session, fallbackPlan("indie"));
+    expect(candidates.map((track) => track.id)).toEqual(["valid"]);
   });
 });

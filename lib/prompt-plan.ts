@@ -32,7 +32,7 @@ function titleFor(prompt: string, genres: string[], energy: EnergyBand) {
 export function fallbackPlan(prompt: string): MixPlan {
   const normalized = prompt.toLowerCase();
   const genres = KNOWN_GENRES.filter((genre) => normalized.includes(genre));
-  if (!genres.length) genres.push("r&b", "indie");
+  if (!genres.length) genres.push(...(/\bclub\b/i.test(prompt) ? ["house", "hip-hop", "pop"] : ["r&b", "indie"]));
   const constraints = explicitArtistConstraints(prompt);
   const anchorArtists = [...new Set([...constraints.allowedArtists, ...KNOWN_ARTISTS.filter((artist) => normalized.includes(artist.toLowerCase()))])]
     .filter((artist) => !constraints.avoidArtists.includes(artist));
@@ -43,6 +43,10 @@ export function fallbackPlan(prompt: string): MixPlan {
   const targetCount = requestedTrackCount(prompt);
   const name = titleFor(prompt, genres, energy);
   const mood = energy === "low" ? "soft, spacious and unhurried" : energy === "high" ? "bright, kinetic and immediate" : "warm, fluid and quietly surprising";
+  // Only bind a locally parsed title when the artist is unambiguous. The AI
+  // planner handles multiple references and more complicated phrasing.
+  const referenceName = prompt.match(/\b(?:song|track)\s+["“]?([^"”.!?;]+?)(?:["”]|$|[.!?;]|\s+(?:by|for|with|and|but|that|which)\b)/i)?.[1]?.trim();
+  const referenceTracks = referenceName && anchorArtists.length === 1 ? [{ name: referenceName, artist: anchorArtists[0] }] : [];
 
   return {
     name,
@@ -56,12 +60,15 @@ export function fallbackPlan(prompt: string): MixPlan {
     energy,
     anchorArtists,
     allowedArtists: constraints.allowedArtists,
-    seedTracks: /ghost/i.test(prompt) ? ["GHOST"] : [],
+    seedTracks: referenceTracks.map((track) => track.name),
+    referenceTracks,
+    soundProfile: compactText(`${genres.join(", ")}; ${energy} energy. ${prompt}`, 400),
     avoidArtists: constraints.avoidArtists,
     avoidTraits: /nothing too hype|not.*energetic/i.test(prompt) ? ["hype", "aggressive", "high energy"] : [],
     familiarityTarget: 1 - discoveryTarget,
     discoveryTarget,
     searchQueries: constraints.allowedArtists.length ? artistSearchQueries(constraints.allowedArtists) : [
+      ...referenceTracks.map((track) => `track:"${track.name}" artist:"${track.artist}"`),
       ...anchorArtists.slice(0, 3).map((artist) => `artist:${artist}`),
       ...genres.slice(0, 3).map((genre) => `genre:${genre}`),
       `${genres[0]} ${energy === "low" ? "slow chill" : energy === "high" ? "upbeat" : "mix"}`,
@@ -86,6 +93,8 @@ export function normalizePlan(plan: MixPlan, prompt: string): MixPlan {
     anchorArtists: (plan.anchorArtists || []).slice(0, 8),
     allowedArtists,
     seedTracks: (plan.seedTracks || []).slice(0, 8),
+    referenceTracks: (plan.referenceTracks || fallbackPlan(prompt).referenceTracks).slice(0, 8),
+    soundProfile: compactText(plan.soundProfile || fallbackPlan(prompt).soundProfile, 400),
     avoidArtists: [...new Set([...(plan.avoidArtists || []), ...explicit.avoidArtists])],
     avoidTraits: (plan.avoidTraits || []).slice(0, 8),
     discoveryTarget: discovery,

@@ -38,4 +38,16 @@ describe("playlist prompt constraints", () => {
     expect(plan.anchorArtists).not.toContain("Drake");
     expect(plan.energy).toBe("high");
   });
+  it("preserves the soft indie reference with an artist-qualified search", () => {
+    const plan = fallbackPlan("Create a playlist with a soft indie vibe like yel's music and her recent song GHOST");
+    expect(plan.energy).toBe("low");
+    expect(plan.genres).toEqual(["indie"]);
+    expect(plan.allowedArtists).toEqual([]);
+    expect(plan.referenceTracks).toEqual([{ name: "GHOST", artist: "Yel" }]);
+    expect(plan.searchQueries).toContain('track:"GHOST" artist:"Yel"');
+  });
+  it("pairs other named song references without special-casing Yel", () => {
+    expect(fallbackPlan("soft indie like Clairo's song Bags").referenceTracks).toEqual([{ name: "Bags", artist: "Clairo" }]);
+    expect(fallbackPlan('soft music like the song "Pink + White" by Frank Ocean').referenceTracks).toEqual([{ name: "Pink + White", artist: "Frank Ocean" }]);
+  });
 });
