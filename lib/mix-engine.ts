@@ -9,9 +9,9 @@ import { stableId } from "@/lib/utils";
 export async function generateMix(prompt: string, session: SpotifySession | null): Promise<MixRecord> {
   const { plan } = await createMixPlan(prompt);
   const candidates = session ? await getTasteCandidates(session, plan) : demoCatalog;
-  if (candidates.length < 15) throw new Error("Spotify returned too few available tracks for this request. Try a slightly broader prompt.");
   const { tracks: scored, jevEvaluated } = await scoreCandidates(candidates, plan, prompt);
   const tracks = chooseTracks(scored, plan, prompt);
+  if (!tracks.length) throw new Error("No available tracks matched this request. Try a different artist or a broader prompt.");
   const cover = await createCover(plan);
   const familiar = tracks.filter((track) => track.familiar).length;
   return {

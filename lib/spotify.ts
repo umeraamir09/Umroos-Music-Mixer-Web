@@ -1,5 +1,6 @@
 import type { MixPlan, MixTrack, SpotifySession } from "@/lib/types";
 import { chunk, dedupeBy } from "@/lib/utils";
+import { artistSearchQueries, matchesArtistConstraints } from "@/lib/artist-constraints";
 
 const API = "https://api.spotify.com/v1";
 
@@ -93,13 +94,30 @@ export async function getTasteCandidates(session: SpotifySession, plan: MixPlan)
     ...saved.items.map(({ track }) => toMixTrack(track, "saved", true)),
   ];
 
-  const searches = await Promise.all(plan.searchQueries.slice(0, 8).map((query) =>
-    safe<{ tracks: { items: SpotifyTrack[] } }>({ tracks: { items: [] } }, () =>
-      spotifyFetch(token, `/search?type=track&limit=10&q=${encodeURIComponent(query)}`),
-    ),
-  ));
-  const discoveries = searches.flatMap((result) => result.tracks.items.map((track) => toMixTrack(track, "search", false)));
-  const candidates = dedupeBy([...taste, ...discoveries], (track) => `${track.name}::${track.artists[0]}`).slice(0, 180);
+  const queries = dedupeBy(plan.allowedArtists?.length ? artistSearchQueries(plan.allowedArtists) : plan.searchQueries, (query) => query).slice(0, 8);
+  const candidateLimit = Math.max(180, plan.targetCount * 2);
+  const perQuery = Math.ceil(Math.max(80, plan.targetCount * 2) / Math.max(1, queries.length));
+  const searches = await Promise.all(queries.map(async (query) => {
+    const tracks: MixTrack[] = [];
+    // Search is limited to 10 tracks per page. Retrieve enough of a restricted
+    // catalog to select for vibe, rather than filling from unrelated taste data.
+    for (let offset = 0; offset < perQuery; offset += 10) {
+      const result = await safe<{ tracks: { items: SpotifyTrack[]; next?: string | null } }>({ tracks: { items: [], next: null } }, () =>
+        spotifyFetch(token, `/search?type=track&limit=10&offset=${offset}&q=${encodeURIComponent(query)}`),
+      );
+      tracks.push(...result.tracks.items.map((track) => toMixTrack(track, "search", false)));
+      if (result.tracks.next === null || result.tracks.items.length < 10) break;
+    }
+    return tracks;
+  }));
+  const familiarById = new Map(taste.map((track) => [track.id, track]));
+  const familiarByName = new Map(taste.map((track) => [`${track.name}::${track.artists[0]}`.toLowerCase(), track]));
+  const discoveries = searches.flat().map((track) => {
+    const known = familiarById.get(track.id) || familiarByName.get(`${track.name}::${track.artists[0]}`.toLowerCase());
+    return known ? { ...track, familiar: true, source: known.source } : track;
+  });
+  // Requested catalog results take priority over an arbitrarily long history.
+  const candidates = dedupeBy([...discoveries, ...taste].filter((track) => matchesArtistConstraints(track, plan)), (track) => `${track.name}::${track.artists[0]}`).slice(0, candidateLimit);
 
   // Audio features are enrichment only; some Spotify app modes do not expose them.
   const ids = candidates.map((track) => track.id);

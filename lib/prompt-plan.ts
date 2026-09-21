@@ -1,8 +1,8 @@
 import type { EnergyBand, MixPlan } from "@/lib/types";
 import { clamp, compactText } from "@/lib/utils";
+import { artistSearchQueries, explicitArtistConstraints, KNOWN_ARTISTS } from "@/lib/artist-constraints";
 
 const KNOWN_GENRES = ["house", "r&b", "indie", "jazz", "hip-hop", "pop", "electronic", "funk", "rock", "afrobeats", "soul"];
-const KNOWN_ARTISTS = ["Drake", "SZA", "Frank Ocean", "The Weeknd", "Daniel Caesar", "Yel", "Beach House", "KAYTRANADA", "Tame Impala", "Clairo", "ODESZA"];
 
 export function requestedTrackCount(prompt: string) {
   const match = prompt.match(/(?:at\s*least|atleast|about|around|roughly|exactly|add|with)?\s*(\d{1,3})\s*(?:songs?|tracks?)/i);
@@ -12,7 +12,7 @@ export function requestedTrackCount(prompt: string) {
 
 function inferEnergy(text: string): EnergyBand {
   if (/nothing too hype|not (?:too )?(?:loud|energetic)|sleepy|slow|soft|calm|relax|wind down/i.test(text)) return "low";
-  if (/high energy|hype|workout|party|loud|run(?:ning)?/i.test(text)) return "high";
+  if (/high energy|hype|workout|party|club|loud|run(?:ning)?/i.test(text)) return "high";
   if (/build|journey|arc|start slow|dynamic/i.test(text)) return "dynamic";
   return "medium";
 }
@@ -33,7 +33,9 @@ export function fallbackPlan(prompt: string): MixPlan {
   const normalized = prompt.toLowerCase();
   const genres = KNOWN_GENRES.filter((genre) => normalized.includes(genre));
   if (!genres.length) genres.push("r&b", "indie");
-  const anchorArtists = KNOWN_ARTISTS.filter((artist) => normalized.includes(artist.toLowerCase()));
+  const constraints = explicitArtistConstraints(prompt);
+  const anchorArtists = [...new Set([...constraints.allowedArtists, ...KNOWN_ARTISTS.filter((artist) => normalized.includes(artist.toLowerCase()))])]
+    .filter((artist) => !constraints.avoidArtists.includes(artist));
   const energy = inferEnergy(prompt);
   const entirelyNew = /entirely new|all new|only new|never heard/i.test(prompt);
   const veryFamiliar = /only (?:artists|songs) i (?:know|like)|usual artists|heard (?:the )?most|recently/i.test(prompt);
@@ -44,30 +46,35 @@ export function fallbackPlan(prompt: string): MixPlan {
 
   return {
     name,
-    description: `A ${mood} mix that keeps your favourites close while making room for a few new discoveries.`,
+    description: constraints.allowedArtists.length
+      ? `A ${mood} mix drawn from ${constraints.allowedArtists.join(" and ")}.`
+      : `A ${mood} mix that keeps your favourites close while making room for a few new discoveries.`,
     coverPrompt: compactText(`${mood} abstract music cover, ${genres.slice(0, 2).join(" and ")}, minimal cinematic illustration`, 150),
     targetCount,
     genres,
     moods: mood.split(", ").map((value) => value.replace("and ", "")),
     energy,
     anchorArtists,
+    allowedArtists: constraints.allowedArtists,
     seedTracks: /ghost/i.test(prompt) ? ["GHOST"] : [],
-    avoidArtists: [],
+    avoidArtists: constraints.avoidArtists,
     avoidTraits: /nothing too hype|not.*energetic/i.test(prompt) ? ["hype", "aggressive", "high energy"] : [],
     familiarityTarget: 1 - discoveryTarget,
     discoveryTarget,
-    searchQueries: [
+    searchQueries: constraints.allowedArtists.length ? artistSearchQueries(constraints.allowedArtists) : [
       ...anchorArtists.slice(0, 3).map((artist) => `artist:${artist}`),
       ...genres.slice(0, 3).map((genre) => `genre:${genre}`),
       `${genres[0]} ${energy === "low" ? "slow chill" : energy === "high" ? "upbeat" : "mix"}`,
     ].slice(0, 7),
-    rationale: "A familiar-first blend with controlled discovery and energy matched to the request.",
+    rationale: "Match the request first; use familiarity and discovery to choose among suitable tracks within its constraints.",
   };
 }
 
 export function normalizePlan(plan: MixPlan, prompt: string): MixPlan {
   const targetCount = requestedTrackCount(prompt);
   const discovery = clamp(Number(plan.discoveryTarget ?? 0.28), 0, 1);
+  const explicit = explicitArtistConstraints(prompt, [...(plan.anchorArtists || []), ...(plan.allowedArtists || []), ...(plan.avoidArtists || [])]);
+  const allowedArtists = explicit.allowedArtists.length ? explicit.allowedArtists : (plan.allowedArtists || []);
   return {
     ...plan,
     name: compactText(plan.name || fallbackPlan(prompt).name, 64),
@@ -77,11 +84,12 @@ export function normalizePlan(plan: MixPlan, prompt: string): MixPlan {
     genres: (plan.genres || []).slice(0, 6),
     moods: (plan.moods || []).slice(0, 6),
     anchorArtists: (plan.anchorArtists || []).slice(0, 8),
+    allowedArtists,
     seedTracks: (plan.seedTracks || []).slice(0, 8),
-    avoidArtists: (plan.avoidArtists || []).slice(0, 8),
+    avoidArtists: [...new Set([...(plan.avoidArtists || []), ...explicit.avoidArtists])],
     avoidTraits: (plan.avoidTraits || []).slice(0, 8),
     discoveryTarget: discovery,
     familiarityTarget: clamp(1 - discovery, 0, 1),
-    searchQueries: (plan.searchQueries || []).filter(Boolean).slice(0, 8),
+    searchQueries: allowedArtists.length ? artistSearchQueries(allowedArtists) : (plan.searchQueries || []).filter(Boolean).slice(0, 8),
   };
 }

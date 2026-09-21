@@ -9,6 +9,8 @@ export type MixPlan = {
   moods: string[];
   energy: EnergyBand;
   anchorArtists: string[];
+  // Empty means unrestricted. Otherwise every track must credit an allowed artist.
+  allowedArtists: string[];
   seedTracks: string[];
   avoidArtists: string[];
   avoidTraits: string[];
@@ -34,6 +36,8 @@ export type MixTrack = {
   energy?: number;
   danceability?: number;
   fitProbability?: number;
+  // Explicit Jev rejection must survive selection and backfilling.
+  meetsRequest?: boolean;
 };
 
 export type MixRecord = {
