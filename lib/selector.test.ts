@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { experimental_evaluate as evaluate } from "ai";
+import { evaluateJev } from "@/lib/jev";
 import { fallbackPlan } from "./prompt-plan";
 import { chooseTracks, scoreCandidates } from "./selector";
 import type { MixTrack } from "./types";
 
-vi.mock("ai", () => ({ experimental_evaluate: vi.fn() }));
-const evaluateMock = vi.mocked(evaluate);
+vi.mock("@/lib/jev", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/jev")>();
+  return { ...actual, evaluateJev: vi.fn() };
+});
+const evaluateMock = vi.mocked(evaluateJev);
 const prompt = "A Drake only club music playlist.";
 const makeTrack = (id: string, artists = ["Drake"], familiar = false, fitProbability = 0.9): MixTrack => ({
   id, name: id, artists, familiar, fitProbability, meetsRequest: true, album: "Album", durationMs: 180000, source: "search",
@@ -47,9 +50,9 @@ describe("request-first selection", () => {
   });
   it("enforces restrictions without AI or after an evaluation outage", async () => {
     const candidates = [{ ...makeTrack("allowed"), genres: ["house"], energy: 0.8 }, makeTrack("blocked", ["SZA"], true)];
-    vi.stubEnv("AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("OPENCODE_API_KEY", "");
     expect((await scoreCandidates(candidates, fallbackPlan(prompt), prompt)).tracks.map((track) => track.id)).toEqual(["allowed"]);
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
+    vi.stubEnv("OPENCODE_API_KEY", "test");
     evaluateMock.mockRejectedValue(new Error("offline"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const result = await scoreCandidates(candidates, fallbackPlan(prompt), prompt);
@@ -60,10 +63,10 @@ describe("request-first selection", () => {
 
 describe("Jev's musical-fit role", () => {
   it("evaluates only eligible artists, rejects off-vibe recordings and omits taste quotas", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
+    vi.stubEnv("OPENCODE_API_KEY", "test");
     evaluateMock.mockResolvedValue({ answers: {
-      track_0: { type: "boolean", probability: 0.95 },
-      track_1: { type: "boolean", probability: 0.1 },
+      track_0: { type: "noul", noul: 0.95 },
+      track_1: { type: "noul", noul: 0.1 },
     } } as never);
     const result = await scoreCandidates([makeTrack("club"), makeTrack("ballad", ["Drake"], true), makeTrack("wrong-artist", ["SZA"])], fallbackPlan(prompt), prompt);
     expect(result.jevEvaluated).toBe(2);
@@ -79,7 +82,7 @@ describe("Jev's musical-fit role", () => {
     expect(state.judgingRules).toContain("Do not reject a track merely because other tracks have the same artist");
   });
   it("sends JSON-compatible state for tracks missing genres and audio features", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
+    vi.stubEnv("OPENCODE_API_KEY", "test");
     evaluateMock.mockImplementation(async ({ state }) => {
       const scan = (value: unknown): void => {
         expect(value).not.toBe(undefined);
@@ -91,7 +94,7 @@ describe("Jev's musical-fit role", () => {
       const candidates = (state as { candidates: Record<string, unknown>[] }).candidates;
       expect(candidates[0]).not.toHaveProperty("genres");
       expect(candidates[0]).not.toHaveProperty("energy");
-      return { answers: { track_0: { type: "boolean", probability: 0.9 } } } as never;
+      return { answers: { track_0: { type: "noul", noul: 0.9 } } } as never;
     });
     const track: MixTrack = { ...makeTrack("bare", ["Drake"]), genres: undefined, energy: undefined, danceability: NaN };
     const result = await scoreCandidates([track], fallbackPlan(prompt), prompt);
@@ -99,17 +102,17 @@ describe("Jev's musical-fit role", () => {
     expect(result.jevEvaluated).toBe(1);
   });
   it("preserves earlier rejections when another batch fails", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
+    vi.stubEnv("OPENCODE_API_KEY", "test");
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    evaluateMock.mockResolvedValueOnce({ answers: Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`track_${i}`, { type: "boolean", probability: 0.1 }])) } as never)
+    evaluateMock.mockResolvedValueOnce({ answers: Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`track_${i}`, { type: "noul", noul: 0.1 }])) } as never)
       .mockRejectedValueOnce(new Error("offline"));
     const result = await scoreCandidates(Array.from({ length: 61 }, (_, i) => makeTrack(`track-${i}`)), fallbackPlan(prompt), prompt);
     expect(result.jevEvaluated).toBe(60);
     expect(chooseTracks(result.tracks, fallbackPlan(prompt), prompt)).toEqual([]);
   });
   it("does not silently discard candidates after the old 150-track cutoff", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
-    evaluateMock.mockImplementation(async ({ questions }) => ({ answers: Object.fromEntries(Object.keys(questions).map((id) => [id, { type: "boolean", probability: 0.9 }])) }) as never);
+    vi.stubEnv("OPENCODE_API_KEY", "test");
+    evaluateMock.mockImplementation(async ({ questions }) => ({ answers: Object.fromEntries(Object.keys(questions).map((id) => [id, { type: "noul", noul: 0.9 }])) }) as never);
     const result = await scoreCandidates(Array.from({ length: 180 }, (_, i) => makeTrack(`track-${i}`)), fallbackPlan(prompt), prompt);
     expect(result.tracks).toHaveLength(180);
     expect(result.jevEvaluated).toBe(180);
@@ -133,7 +136,7 @@ describe("soft reference sound and liked-song fit", () => {
   });
 
   it("rejects unknown, title-only, and loud matches when Jev is unavailable", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("OPENCODE_API_KEY", "");
     const plan = fallbackPlan(request);
     const candidates = [
       liked("unknown"),
@@ -149,11 +152,11 @@ describe("soft reference sound and liked-song fit", () => {
   });
 
   it("does not turn missing, malformed or borderline Jev answers into liked-song approvals", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
+    vi.stubEnv("OPENCODE_API_KEY", "test");
     evaluateMock.mockResolvedValue({ answers: {
-      track_0: { type: "boolean", probability: 0.4 },
-      track_1: { type: "boolean", probability: NaN },
-      track_3: { type: "boolean", probability: 0.95 },
+      track_0: { type: "noul", noul: 0.4 },
+      track_1: { type: "noul", noul: NaN },
+      track_3: { type: "noul", noul: 0.95 },
     } } as never);
     const result = await scoreCandidates([liked("borderline"), liked("invalid"), liked("missing"), liked("fits")], fallbackPlan(request), request);
     expect(result.jevEvaluated).toBe(2);
@@ -165,19 +168,18 @@ describe("soft reference sound and liked-song fit", () => {
   });
 
   it("evaluates older likes in compact batches with bounded concurrent decisions", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test");
+    vi.stubEnv("OPENCODE_API_KEY", "test");
     let active = 0;
     let peak = 0;
-    evaluateMock.mockImplementation(async ({ questions, state, maxRetries }) => {
+    evaluateMock.mockImplementation(async ({ questions, state }) => {
       active++;
       peak = Math.max(peak, active);
-      expect(maxRetries).toBe(0);
       expect(Object.keys(questions).length).toBeLessThanOrEqual(60);
       expect(JSON.stringify(questions).length).toBeLessThan(40000);
       await new Promise((resolve) => setTimeout(resolve, 1));
       active--;
       const candidates = (state as { candidates: { title: string }[] }).candidates;
-      return { answers: Object.fromEntries(candidates.map((track, index) => [`track_${index}`, { type: "boolean", probability: track.title === "old-like-299" ? 0.95 : 0.1 }])) } as never;
+      return { answers: Object.fromEntries(candidates.map((track, index) => [`track_${index}`, { type: "noul", noul: track.title === "old-like-299" ? 0.95 : 0.1 }])) } as never;
     });
     const result = await scoreCandidates(Array.from({ length: 300 }, (_, index) => liked(`old-like-${index}`)), fallbackPlan(request), request);
     expect(result.jevEvaluated).toBe(300);

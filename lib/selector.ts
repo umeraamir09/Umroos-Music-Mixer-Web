@@ -1,16 +1,11 @@
-import { experimental_evaluate as evaluate, type Experimental_EvaluationQuestion } from "ai";
 import type { MixPlan, MixTrack } from "@/lib/types";
 import { chunk, dedupeBy, mapConcurrent } from "@/lib/utils";
 import { matchesArtistConstraints } from "@/lib/artist-constraints";
 import { normalizePlan } from "@/lib/prompt-plan";
+import { evaluateJev, hasJevProvider, jevLogsEnabled, type JevQuestions } from "@/lib/jev";
 
 const MIN_FIT = 0.5;
 const key = (value: string) => value.normalize("NFKC").trim().toLowerCase();
-
-function jevLogsEnabled() {
-  const raw = process.env.JEV_LOGS?.trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
 
 function energyClashes(track: MixTrack, plan: MixPlan) {
   if (track.energy == null) return false;
@@ -34,10 +29,10 @@ function finiteOrUndefined(value: number | undefined) {
 }
 
 async function evaluateBatch(batch: MixTrack[], plan: MixPlan, prompt: string, batchIndex = 0) {
-  const questions: Record<string, Experimental_EvaluationQuestion> = {};
+  const questions: JevQuestions = {};
   batch.forEach((_, index) => {
     questions[`track_${index}`] = {
-      type: "boolean",
+      type: "noul",
       instructions: `Apply judgingRules to candidate ${index}. Is there positive evidence that this recording fits the requested sound and all constraints? Uncertain means false.`,
       criteria: {
         true: "Clear musical fit; all restrictions satisfied.",
@@ -46,7 +41,6 @@ async function evaluateBatch(batch: MixTrack[], plan: MixPlan, prompt: string, b
     };
   });
 
-  const model = process.env.JEV_MODEL || "typesafe-ai/jev";
   const rawState = {
     judgingRules,
     request: prompt,
@@ -73,21 +67,16 @@ async function evaluateBatch(batch: MixTrack[], plan: MixPlan, prompt: string, b
       explicit: Boolean(track.explicit),
     })),
   };
-  // The AI SDK rejects `undefined` (and non-finite numbers) as non-JSON-compatible
-  // state. Strip them so tracks missing genres/audio-features still evaluate.
+  // The evaluation API only accepts JSON-compatible state; `undefined` and
+  // non-finite numbers are rejected. Strip them so tracks missing
+  // genres/audio-features still evaluate.
   const state = JSON.parse(JSON.stringify(rawState));
 
   if (jevLogsEnabled()) {
-    console.log(`[jev] batch ${batchIndex} request:`, JSON.stringify({ model, state, questions }, null, 2));
+    console.log(`[jev] batch ${batchIndex} request:`, JSON.stringify({ state, questions }, null, 2));
   }
 
-  const result = await evaluate({
-    model,
-    state,
-    questions,
-    maxRetries: 0,
-    abortSignal: AbortSignal.timeout(8000),
-  });
+  const result = await evaluateJev({ state, questions });
 
   if (jevLogsEnabled()) {
     console.log(`[jev] batch ${batchIndex} exact response:`, JSON.stringify(result, null, 2));
@@ -95,17 +84,17 @@ async function evaluateBatch(batch: MixTrack[], plan: MixPlan, prompt: string, b
 
   return batch.map((track, index) => {
     const answer = result.answers[`track_${index}`];
-    if (answer?.type !== "boolean" || !Number.isFinite(answer.probability) || answer.probability < 0 || answer.probability > 1) {
+    if (answer?.type !== "noul" || !Number.isFinite(answer.noul) || answer.noul < 0 || answer.noul > 1) {
       return localAssessment(track, plan);
     }
-    return { ...track, fitProbability: answer.probability, meetsRequest: answer.probability >= MIN_FIT, fitSource: "jev" as const };
+    return { ...track, fitProbability: answer.noul, meetsRequest: answer.noul >= MIN_FIT, fitSource: "jev" as const };
   });
 }
 
 export async function scoreCandidates(candidates: MixTrack[], plan: MixPlan, prompt: string) {
   plan = normalizePlan(plan, prompt);
   const eligible = dedupeBy(candidates.filter((track) => matchesArtistConstraints(track, plan) && !energyClashes(track, plan)), (track) => `${track.name}::${track.artists[0]}`);
-  if (!process.env.AI_GATEWAY_API_KEY) {
+  if (!hasJevProvider()) {
     return { tracks: eligible.map((track) => localAssessment(track, plan)), jevEvaluated: 0 };
   }
 
