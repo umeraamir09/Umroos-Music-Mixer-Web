@@ -8,7 +8,7 @@ import { AppHeader } from "@/components/app-header";
 import { storeLocalMix } from "@/components/mix-storage";
 import type { MixRecord } from "@/lib/types";
 
-const phases = ["Reading between the lines…", "Learning the shape of your taste…", "Letting Jev audition every track…", "Sequencing the perfect flow…", "Finishing the cover art…"];
+const phases = ["Reading between the lines…", "Learning the shape of your taste…", "Filling in every song's details…", "Letting Jev audition every track…", "Sequencing the perfect flow…", "Finishing the cover art…"];
 
 export default function GeneratingPage() {
   const router = useRouter();

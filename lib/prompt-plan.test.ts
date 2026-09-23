@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { fallbackPlan, requestedTrackCount } from "./prompt-plan";
+import { fallbackPlan, normalizePlan, requestedTrackCount } from "./prompt-plan";
 
 describe("playlist prompt constraints", () => {
   it("uses 40 tracks when quantity is omitted", () => expect(requestedTrackCount("late night R&B")).toBe(40));
-  it("enforces the 15 track minimum", () => expect(requestedTrackCount("make it 4 songs")).toBe(15));
+  it("preserves small explicit counts", () => expect(requestedTrackCount("make it 4 songs")).toBe(4));
   it("enforces the 200 track maximum", () => expect(requestedTrackCount("add 900 tracks")).toBe(200));
   it("respects explicit valid quantities", () => expect(requestedTrackCount("add at least 60 songs")).toBe(60));
   it("detects low-energy negative constraints", () => {
@@ -11,5 +11,43 @@ describe("playlist prompt constraints", () => {
     expect(plan.energy).toBe("low");
     expect(plan.anchorArtists).toEqual(["Drake", "SZA"]);
     expect(plan.avoidTraits).toContain("high energy");
+  });
+  it.each([
+    ["A Drake only club music playlist.", ["Drake"]],
+    ["Drake-only club tracks", ["Drake"]],
+    ["Only songs by Bad Bunny for the club", ["Bad Bunny"]],
+    ["A Beyoncé only playlist", ["Beyoncé"]],
+    ["Only Drake and SZA songs", ["Drake", "SZA"]],
+    ["Drake and SZA only", ["Drake", "SZA"]],
+    ["Nothing but The Weeknd", ["The Weeknd"]],
+  ])("extracts a hard artist scope from %s", (prompt, artists) => {
+    expect(fallbackPlan(prompt).allowedArtists.sort()).toEqual([...artists].sort());
+  });
+  it.each(["mostly Drake", "artists like Drake", "Drake heavy with SZA", "not only Drake", "Drake, only songs I know", "only house music with Drake"])("keeps soft or unrelated instructions unrestricted: %s", (prompt) => {
+    expect(fallbackPlan(prompt).allowedArtists).toEqual([]);
+  });
+  it("repairs AI scope expansion and broad searches from the explicit prompt", () => {
+    const plan = normalizePlan({ ...fallbackPlan("club"), allowedArtists: ["Drake", "SZA"], searchQueries: ["genre:house"] }, "A Drake only club music playlist.");
+    expect(plan.allowedArtists).toEqual(["Drake"]);
+    expect(plan.searchQueries).toEqual(['artist:"Drake"']);
+  });
+  it("retains AI-parsed complex restrictions and excludes named artists locally", () => {
+    expect(normalizePlan({ ...fallbackPlan("club"), allowedArtists: ["Bad Bunny"] }, "Keep every recording within Bad Bunny's catalog").allowedArtists).toEqual(["Bad Bunny"]);
+    const plan = fallbackPlan("club, no Drake");
+    expect(plan.avoidArtists).toContain("Drake");
+    expect(plan.anchorArtists).not.toContain("Drake");
+    expect(plan.energy).toBe("high");
+  });
+  it("preserves the soft indie reference with an artist-qualified search", () => {
+    const plan = fallbackPlan("Create a playlist with a soft indie vibe like yel's music and her recent song GHOST");
+    expect(plan.energy).toBe("low");
+    expect(plan.genres).toEqual(["indie"]);
+    expect(plan.allowedArtists).toEqual([]);
+    expect(plan.referenceTracks).toEqual([{ name: "GHOST", artist: "Yel" }]);
+    expect(plan.searchQueries).toContain('track:"GHOST" artist:"Yel"');
+  });
+  it("pairs other named song references without special-casing Yel", () => {
+    expect(fallbackPlan("soft indie like Clairo's song Bags").referenceTracks).toEqual([{ name: "Bags", artist: "Clairo" }]);
+    expect(fallbackPlan('soft music like the song "Pink + White" by Frank Ocean').referenceTracks).toEqual([{ name: "Pink + White", artist: "Frank Ocean" }]);
   });
 });

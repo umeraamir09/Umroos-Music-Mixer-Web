@@ -53,6 +53,7 @@ export default function MixResultPage() {
             <h1>{mix.name}</h1>
             <p>{mix.description}</p>
             <div className="mix-meta"><span><Clock3 size={15} /> {mix.tracks.length} tracks</span><span><Sparkles size={15} /> {mix.stats.discoveries} discoveries</span></div>
+            {mix.tracks.length < mix.targetCount && <p>Found {mix.tracks.length} matching tracks out of {mix.targetCount} requested. This mix stays within your request.</p>}
             <div className="result-actions">
               <button onClick={saveToSpotify} disabled={saving} className={`spotify-button ${mix.status === "saved" ? "saved" : ""}`}>
                 {saving ? <RefreshCw className="animate-spin" size={21} /> : mix.status === "saved" ? <Check size={21} /> : <SpotifyIcon />}

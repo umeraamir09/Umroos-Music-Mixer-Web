@@ -18,4 +18,19 @@ export default defineSchema({
     createdAt: v.number(),
     stats: v.object({ familiar: v.number(), discoveries: v.number(), jevEvaluated: v.number() }),
   }).index("by_user_created", ["userId", "createdAt"]).index("by_public_id", ["publicId"]),
+  // Durable enrichment cache: MusicBrainz allows one request per second, so
+  // every track's mbid/genres/tags/features are resolved once and reused.
+  // Keys: "sp:{spotifyId}", "ref:{artist}::{title}", "tag:{name}".
+  enrichmentCache: defineTable({
+    key: v.string(),
+    isrc: v.optional(v.string()),
+    mbid: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
+    tags: v.optional(v.array(v.string())),
+    summary: v.optional(v.string()),
+    features: v.optional(v.any()),
+    similar: v.optional(v.array(v.object({ title: v.string(), artist: v.string(), match: v.number() }))),
+    tried: v.optional(v.object({ lastfm: v.optional(v.boolean()), lastfmMbid: v.optional(v.boolean()), musicbrainz: v.optional(v.boolean()) })),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 });
