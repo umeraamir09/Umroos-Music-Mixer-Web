@@ -3,7 +3,7 @@ import { fallbackPlan, normalizePlan, requestedTrackCount } from "./prompt-plan"
 
 describe("playlist prompt constraints", () => {
   it("uses 40 tracks when quantity is omitted", () => expect(requestedTrackCount("late night R&B")).toBe(40));
-  it("enforces the 15 track minimum", () => expect(requestedTrackCount("make it 4 songs")).toBe(15));
+  it("preserves small explicit counts", () => expect(requestedTrackCount("make it 4 songs")).toBe(4));
   it("enforces the 200 track maximum", () => expect(requestedTrackCount("add 900 tracks")).toBe(200));
   it("respects explicit valid quantities", () => expect(requestedTrackCount("add at least 60 songs")).toBe(60));
   it("detects low-energy negative constraints", () => {

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as enrichmentCache from "../enrichmentCache.js";
 import type * as mixes from "../mixes.js";
 
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  enrichmentCache: typeof enrichmentCache;
   mixes: typeof mixes;
 }>;
 

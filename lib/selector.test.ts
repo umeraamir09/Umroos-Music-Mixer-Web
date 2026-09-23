@@ -188,3 +188,89 @@ describe("soft reference sound and liked-song fit", () => {
     expect(chooseTracks(result.tracks, fallbackPlan(request), request).map((track) => track.id)).toEqual(["old-like-299"]);
   });
 });
+
+describe("deterministic enrichment reaches Jev", () => {
+  it("includes audio, tags, similarity and definitions without popularity fields", async () => {
+    vi.stubEnv("OPENCODE_API_KEY", "test");
+    evaluateMock.mockImplementation(async ({ state }) => {
+      const captured = state as { target: Record<string, unknown>; candidates: Record<string, unknown>[]; judgingRules: string };
+      const candidate = captured.candidates[0];
+      expect(candidate.genres).toEqual(["house", "electronic", "dance", "disco", "funk", "garage"]);
+      expect(candidate.tags).toEqual(["club", "groovy", "late night"]);
+      expect(candidate.tagSummary).toBe("A propulsive club track.");
+      expect(candidate.audio).toEqual({
+        energy: 0.78,
+        danceability: 0.7,
+        tempo: 121.5,
+        valence: 0.61,
+        acousticness: 0.12,
+        instrumentalness: 0.02,
+        speechiness: 0.04,
+        liveness: 0.11,
+        loudness: -5.4,
+      });
+      expect(candidate.similarTo).toEqual([{ ref: "Yel — GHOST", match: 0.9 }]);
+      // Popularity and taste stay hidden from the judge.
+      expect(candidate).not.toHaveProperty("familiar");
+      expect(candidate).not.toHaveProperty("source");
+      expect(candidate).not.toHaveProperty("popularity");
+      expect(candidate).not.toHaveProperty("familiarity");
+      expect(captured.target.tagDefinitions).toEqual({ indie: "Soft guitar-led music." });
+      expect(captured.judgingRules).toContain("listening-data similarity");
+      expect(captured.judgingRules).toContain("Absent fields are unknown, not neutral");
+      return { answers: { track_0: { type: "noul", noul: 0.9 } } } as never;
+    });
+    const track: MixTrack = {
+      ...makeTrack("enriched"),
+      genres: ["house", "electronic", "dance", "disco", "funk", "garage"],
+      tags: ["club", "groovy", "late night"],
+      tagSummary: "A propulsive club track.",
+      energy: 0.78,
+      danceability: 0.7,
+      tempo: 121.5,
+      valence: 0.61,
+      acousticness: 0.12,
+      instrumentalness: 0.02,
+      speechiness: 0.04,
+      liveness: 0.11,
+      loudness: -5.4,
+      similarTo: [{ ref: "Yel — GHOST", match: 0.9 }],
+      mbid: "mbid-1",
+      isrc: "US-1",
+    };
+
+    const result = await scoreCandidates([track], fallbackPlan(prompt), prompt, {
+      tagDefinitions: { indie: "Soft guitar-led music." },
+    });
+
+    expect(result.jevEvaluated).toBe(1);
+    expect(evaluateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("caps genres, tags and similarity entries and omits absent evidence entirely", async () => {
+    vi.stubEnv("OPENCODE_API_KEY", "test");
+    evaluateMock.mockImplementation(async ({ state }) => {
+      const captured = state as { target: Record<string, unknown>; candidates: Record<string, unknown>[] };
+      const candidate = captured.candidates[0];
+      expect(candidate.genres).toHaveLength(6);
+      expect(candidate.tags).toHaveLength(6);
+      expect((candidate.similarTo as unknown[]).length).toBeLessThanOrEqual(3);
+      // No enrichment context -> no definitions key at all.
+      expect(captured.target).not.toHaveProperty("tagDefinitions");
+      return { answers: { track_0: { type: "noul", noul: 0.9 } } } as never;
+    });
+    const track: MixTrack = {
+      ...makeTrack("capped"),
+      genres: ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"],
+      tags: ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"],
+      similarTo: [
+        { ref: "Yel — GHOST", match: 0.9 },
+        { ref: "Yel — GHOST", match: 0.8 },
+        { ref: "Yel — GHOST", match: 0.7 },
+        { ref: "Yel — GHOST", match: 0.6 },
+      ],
+    };
+
+    expect((await scoreCandidates([track], fallbackPlan(prompt), prompt)).jevEvaluated).toBe(1);
+  });
+});

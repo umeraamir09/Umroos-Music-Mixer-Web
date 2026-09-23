@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSpotifyPlaylist, getTasteCandidates } from "./spotify";
+import { createSpotifyPlaylist, fetchTrackNames, getTasteCandidates, resolveSpotifyIdentity } from "./spotify";
 import { fallbackPlan } from "./prompt-plan";
 import type { MixTrack, SpotifySession } from "./types";
 
@@ -116,5 +116,58 @@ describe("request-led candidate retrieval", () => {
     }));
     const candidates = await getTasteCandidates(session, fallbackPlan("indie"));
     expect(candidates.map((track) => track.id)).toEqual(["valid"]);
+  });
+});
+
+describe("Spotify identity extraction for Last.fm", () => {
+  it("extracts canonical track/artist strings from a catalog search", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe("/v1/search");
+      expect(url.searchParams.get("type")).toBe("track");
+      expect(url.searchParams.get("limit")).toBe("1");
+      expect(url.searchParams.get("q")).toBe('track:"GHOST" artist:"Yel"');
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-token");
+      return json({ tracks: { items: [{ id: "hit-1", uri: "spotify:track:hit-1", name: "GHOST", duration_ms: 1, artists: [{ id: "yel", name: "Yel" }], album: { name: "EP" } }] } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const identity = await resolveSpotifyIdentity("test-token", "GHOST", 'Ye"l');
+
+    expect(identity).toEqual({ track: "GHOST", artist: "Yel" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails open to null when the search misses or Spotify errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ tracks: { items: [] } })));
+    expect(await resolveSpotifyIdentity("test-token", "Nope", "Nobody")).toBeNull();
+
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("Spotify 500"); }));
+    expect(await resolveSpotifyIdentity("test-token", "Nope", "Nobody")).toBeNull();
+  });
+
+  it("fetches canonical names through supported single-track lookups and drops removed tracks", async () => {
+    const ids = Array.from({ length: 51 }, (_, index) => (index === 49 ? "gone" : `id-${index}`));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const id = url.pathname.split("/").at(-1)!;
+      expect(url.pathname).toBe(`/v1/tracks/${id}`);
+      return id === "gone" ? new Response("not found", { status: 404 })
+        : json({ id, uri: `spotify:track:${id}`, name: `Name ${id}`, duration_ms: 1, artists: [{ id: "a", name: "Artist" }], album: { name: "Album" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const names = await fetchTrackNames("test-token", ids);
+
+    expect(fetchMock).toHaveBeenCalledTimes(51);
+    expect(names.size).toBe(50);
+    expect(names.get("id-0")).toEqual({ name: "Name id-0", artists: ["Artist"] });
+    expect(names.has("gone")).toBe(false);
+  });
+
+  it("keeps whatever it already resolved when Spotify errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("Spotify down"); }));
+
+    expect((await fetchTrackNames("test-token", ["id-1"])).size).toBe(0);
   });
 });
