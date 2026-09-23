@@ -4,6 +4,7 @@ import { saveMix } from "@/lib/history";
 import { getSpotifySession, SESSION_COOKIE, seal, secureCookieOptions } from "@/lib/session";
 import { refreshSpotifySession } from "@/lib/spotify";
 
+export const runtime = "nodejs";
 // The selector has a bounded work budget and starts cover art in parallel.
 export const maxDuration = 150;
 

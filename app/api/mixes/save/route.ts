@@ -5,6 +5,8 @@ import { getSpotifySession, SESSION_COOKIE, seal, secureCookieOptions } from "@/
 import { createSpotifyPlaylist, refreshSpotifySession } from "@/lib/spotify";
 import type { MixRecord } from "@/lib/types";
 
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const current = await getSpotifySession();
