@@ -7,6 +7,7 @@ node_modules/
 .convex/
 coverage/
 *.log
+*.tsbuildinfo
 .DS_Store
 .obsidian
 .commandcode

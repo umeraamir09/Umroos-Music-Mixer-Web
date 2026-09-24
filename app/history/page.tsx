@@ -10,31 +10,34 @@ import type { MixRecord } from "@/lib/types";
 
 export default function HistoryPage() {
   const [mixes, setMixes] = useState<MixRecord[]>([]);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     const local = readLocalMixes();
-    Promise.resolve().then(() => setMixes(local));
+    Promise.resolve().then(() => { setMixes(local); if (local.length) setLoaded(true); });
     fetch("/api/history").then((value) => value.json()).then(({ mixes: remote }: { mixes: MixRecord[] }) => {
       const map = new Map([...local, ...(remote || [])].map((mix) => [mix.id, mix]));
       setMixes([...map.values()].sort((a, b) => b.createdAt - a.createdAt));
-    }).catch(() => null);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
   }, []);
 
   return (
-    <main className="app-shell min-h-screen pb-20">
+    <main className="app-shell">
       <AppHeader />
       <section className="history-shell">
-        <div className="history-heading"><div><p className="eyebrow mb-3">Your listening journal</p><h1>Past mixes<span className="accent-dot">.</span></h1><p>Every idea stays here — saved to Spotify or not.</p></div><Link className="secondary-button" href="/mix"><Plus size={18} /> New mix</Link></div>
-        {mixes.length ? (
+        <div className="app-section-label"><span>YOUR MUSIC / THE ARCHIVE</span><span className="app-label-rule" /></div>
+        <div className="history-heading"><div><p className="app-overline">YOUR LISTENING JOURNAL</p><h1>Past <em>mixes.</em></h1><p>Every idea stays in the crate, whether you saved it to Spotify or kept it here.</p></div><Link className="secondary-button" href="/mix"><Plus size={18} /> New mix</Link></div>
+        {!loaded ? <div className="history-loading" role="status">Opening your crate…</div> : mixes.length ? (
           <div className="history-grid">
             {mixes.map((mix) => (
               <Link href={`/mix/${mix.id}`} className="history-card" key={mix.id}>
                 <CoverArt src={mix.coverDataUrl} name={mix.name} />
-                <div className="history-card-copy"><div className="history-status"><span className={mix.status}>{mix.status === "saved" ? "Saved to Spotify" : "Not saved yet"}</span><time>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(mix.createdAt)}</time></div><h2>{mix.name}</h2><p>{mix.description}</p><div className="history-bottom"><span>{mix.tracks.length} tracks</span><ArrowRight size={18} /></div></div>
+                <div className="history-card-copy"><div className="history-status"><span className={mix.status}>{mix.status === "saved" ? "SAVED TO SPOTIFY" : mix.status === "save_failed" ? "SAVE FAILED" : "NOT SAVED"}</span><time dateTime={new Date(mix.createdAt).toISOString()}>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(mix.createdAt)}</time></div><h2>{mix.name}</h2><p>{mix.description}</p><div className="history-bottom"><span>{mix.tracks.length} TRACKS</span><ArrowRight size={18} aria-hidden="true" /></div></div>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="history-empty"><Disc3 size={46} /><h2>Your crate is waiting.</h2><p>Make a mix and it&apos;ll live here, whether you save it to Spotify or not.</p><Link className="primary-cta" href="/mix">Make your first mix <ArrowRight size={17} /></Link></div>
+          <div className="history-empty"><Disc3 size={48} strokeWidth={1.2} aria-hidden="true" /><span className="app-overline">NOTHING ON THE SHELF YET</span><h2>Your crate is waiting.</h2><p>Make a mix and it&apos;ll live here, whether you save it to Spotify or not.</p><Link className="primary-cta" href="/mix">Make your first mix <ArrowRight size={17} /></Link></div>
         )}
       </section>
     </main>
