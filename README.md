@@ -9,7 +9,7 @@ An AI playlist maker that turns plain-language intent into a Spotify-ready mix s
 3. Run the local Convex backend in one terminal with `npm run convex:dev`. Select a local deployment when prompted.
 4. Run the app with `npm run dev` and open `http://127.0.0.1:3000`.
 
-The demo flow works with no external credentials. It uses a seeded catalogue, local fit scoring, generated fallback cover art, and browser history. Provider credentials progressively enable Spotify taste data and saving, GLM-4.7-Flash planning, Jev evaluation through OpenCode Zen (falling back to the official TypeSafe API), Last.fm-powered track enrichment, Cloudflare cover generation, and durable Convex history.
+The demo flow works with no external credentials. It uses a seeded catalogue, local fit scoring, generated fallback cover art, and browser history. Provider credentials progressively enable Spotify taste data and saving, GLM-4.7-Flash planning, Jev evaluation through OpenCode Zen (falling back to the official TypeSafe API), Last.fm-powered track enrichment, Cloudflare cover generation, Groq voice prompts, and durable Convex history.
 
 Spotify requires the redirect URI to match exactly. Add `http://127.0.0.1:3000/api/auth/callback` to the app's allowlist; current Spotify guidance rejects `http://localhost` for local OAuth.
 
@@ -23,7 +23,7 @@ Copy `.env.example` to `.env.local` and fill in the services you want to exercis
 | `SESSION_SECRET` | Seals the encrypted session cookie. |
 | `CONVEX_URL` / `NEXT_PUBLIC_CONVEX_URL` | Convex deployment: mix history and the durable enrichment cache. |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_GATEWAY_ID` | GLM-4.7-Flash planning and cover generation. |
-| `GROQ_API_KEY`, `GROQ_MODEL` | Fast primary planner; Cloudflare GLM is the fallback. |
+| `GROQ_API_KEY`, `GROQ_MODEL` | Fast primary planner with Cloudflare GLM as fallback. The same Groq key transcribes voice prompts using `whisper-large-v3-turbo`. |
 | `OPENCODE_API_KEY`, `TYPESAFE_API_KEY` | Jev evaluation chain (OpenCode Zen first, official TypeSafe second). |
 | `JEV_MODEL`, `JEV_OFFICIAL_MODEL`, `JEV_LOGS` | Optional Jev model overrides and request/response logging. |
 | `LASTFM_API_KEY` | The one new secret: community tags, vibe summaries, reference similarity, and tag definitions. Without it, the Last.fm tier is skipped and the rest still runs. |
