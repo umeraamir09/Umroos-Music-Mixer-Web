@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import { createCover, coverBufferFromDataUrl } from "@/lib/cover";
+import { createCover, coverBufferFromDataUrl, normalizeCustomCover } from "@/lib/cover";
 import type { MixPlan } from "@/lib/types";
 
 const plan: MixPlan = {
@@ -27,6 +27,22 @@ const plan: MixPlan = {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("normalizeCustomCover", () => {
+  it("makes an imported image a 1024px JPEG within Spotify's upload limit", async () => {
+    const source = await sharp({ create: { width: 1200, height: 800, channels: 4, background: "#ec809c" } }).png().toBuffer();
+    const jpeg = await normalizeCustomCover(`data:image/png;base64,${source.toString("base64")}`);
+    const metadata = await sharp(jpeg).metadata();
+    expect(metadata.format).toBe("jpeg");
+    expect(metadata.width).toBe(1024);
+    expect(metadata.height).toBe(1024);
+    expect(jpeg.toString("base64").length).toBeLessThanOrEqual(256 * 1024);
+  });
+
+  it("rejects non-image data URLs", async () => {
+    await expect(normalizeCustomCover("data:text/plain;base64,SGVsbG8=")).rejects.toThrow("JPEG, PNG, or WebP");
+  });
 });
 
 describe("createCover", () => {

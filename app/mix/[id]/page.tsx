@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check, Clock3, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock3, ExternalLink, Paintbrush, RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, ViewTransition } from "react";
@@ -82,6 +82,7 @@ export default function MixResultPage() {
                 {saving ? <RefreshCw className="saving-spin" size={19} /> : mix.spotifyUrl ? <ExternalLink size={18} /> : mix.status === "saved" ? <Check size={18} /> : <SpotifyIcon />}
                 {saving ? "Saving…" : mix.spotifyUrl ? "Open in Spotify" : mix.status === "saved" ? "Saved to Spotify" : session?.authenticated ? "Save to Spotify" : "Connect Spotify to save"}
               </button>
+              <Link href={`/mix/${mix.id}/art`} className="secondary-button"><Paintbrush size={18} /> Create your own playlist art</Link>
               <Link href="/mix" className="secondary-button">Make another mix <ArrowRight size={18} /></Link>
             </div>
             <p className="result-save-note">{mix.status === "saved" ? "This mix is in your Spotify library." : "Nothing has been added to Spotify yet. Save it when it feels right."}</p>

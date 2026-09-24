@@ -33,6 +33,28 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.art-loading {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  color: var(--ds-ink);
+  background: var(--ds-paper);
+  text-align: center;
+}
+
+.art-loading button {
+  padding: 10px 16px;
+  border: 1px solid var(--ds-ink);
+  border-radius: 5px;
+  background: var(--ds-ink);
+  color: white;
+  cursor: pointer;
+}
+
 button,
 textarea,
 input {

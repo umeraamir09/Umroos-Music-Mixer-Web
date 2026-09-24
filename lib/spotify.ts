@@ -399,3 +399,11 @@ export async function createSpotifyPlaylist(session: SpotifySession, name: strin
   }
   return playlist;
 }
+
+export async function updateSpotifyPlaylistCover(session: SpotifySession, playlistId: string, coverJpeg: Buffer) {
+  await spotifyFetch<void>(session.accessToken, `/playlists/${encodeURIComponent(playlistId)}/images`, {
+    method: "PUT",
+    headers: { "Content-Type": "image/jpeg" },
+    body: coverJpeg.toString("base64"),
+  });
+}

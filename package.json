@@ -1,6 +1,6 @@
 {
   "name": "umroos-music-mixer",
-  "version": "0.2.1",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3000",
@@ -14,10 +14,12 @@
     "@ai-sdk/openai-compatible": "latest",
     "ai": "latest",
     "convex": "latest",
+    "konva": "^10.7.0",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "react-konva": "^19.3.0",
     "sharp": "latest",
     "zod": "latest"
   },
