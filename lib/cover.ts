@@ -203,3 +203,17 @@ export function coverBufferFromDataUrl(value?: string) {
   if (!value?.startsWith("data:image/jpeg;base64,")) return undefined;
   try { return decodeBase64Image(value); } catch { return undefined; }
 }
+
+export async function normalizeCustomCover(value: string) {
+  if (!/^data:image\/(jpeg|png|webp);base64,/i.test(value)) throw new Error("Choose a JPEG, PNG, or WebP cover image.");
+  let source: Buffer;
+  try { source = decodeBase64Image(value); } catch { throw new Error("The cover image data is invalid."); }
+  const metadata = await sharp(source, { limitInputPixels: 25_000_000 }).metadata();
+  if (!metadata.width || !metadata.height) throw new Error("The cover image could not be read.");
+  for (const quality of [82, 70, 58, 46, 36, 28, 20, 12]) {
+    const jpeg = await sharp(source).resize(1024, 1024, { fit: "cover" })
+      .flatten({ background: "#ffffff" }).jpeg({ quality, mozjpeg: true }).toBuffer();
+    if (jpeg.toString("base64").length <= SPOTIFY_MAX_IMAGE_PAYLOAD) return jpeg;
+  }
+  throw new Error("This cover is too detailed for Spotify’s image limit. Try a simpler image or fewer effects.");
+}

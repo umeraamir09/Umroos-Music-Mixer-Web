@@ -15,7 +15,7 @@ export default function HistoryPage() {
     const local = readLocalMixes();
     Promise.resolve().then(() => { setMixes(local); if (local.length) setLoaded(true); });
     fetch("/api/history").then((value) => value.json()).then(({ mixes: remote }: { mixes: MixRecord[] }) => {
-      const map = new Map([...local, ...(remote || [])].map((mix) => [mix.id, mix]));
+      const map = new Map([...(remote || []), ...local].map((mix) => [mix.id, mix]));
       setMixes([...map.values()].sort((a, b) => b.createdAt - a.createdAt));
       setLoaded(true);
     }).catch(() => setLoaded(true));
