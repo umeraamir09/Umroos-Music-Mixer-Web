@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { OAUTH_COOKIE, SESSION_COOKIE, seal, secureCookieOptions, unseal } from "@/lib/session";
+import { saveProfile } from "@/lib/profiles";
 
 export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000";
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
     scope: token.scope,
     user: { id: profile.id, accountId: profile.account_id, displayName: profile.display_name || "Listener", imageUrl: profile.images?.[0]?.url, country: profile.country },
   };
+  await saveProfile(session.user);
   const response = NextResponse.redirect(new URL("/mix", appUrl));
   response.cookies.set(SESSION_COOKIE, seal(session), { ...secureCookieOptions, maxAge: 60 * 60 * 24 * 30 });
   response.cookies.delete(OAUTH_COOKIE);

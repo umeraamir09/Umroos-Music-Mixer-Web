@@ -16,6 +16,7 @@ beforeEach(() => {
   mutationMock.mockReset();
   vi.stubEnv("CONVEX_URL", "");
   vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "");
+  vi.stubEnv("CONVEX_SERVICE_SECRET", "test-service-secret-at-least-32-characters");
 });
 
 afterEach(() => {

@@ -36,6 +36,10 @@ export async function getSpotifySession() {
   return unseal<SpotifySession>(store.get(SESSION_COOKIE)?.value);
 }
 
+export function spotifyUserId(session: SpotifySession) {
+  return session.user.accountId || session.user.id;
+}
+
 export const secureCookieOptions = {
   httpOnly: true,
   sameSite: "lax" as const,

@@ -5,28 +5,33 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { CoverArt } from "@/components/cover-art";
-import { readLocalMixes } from "@/components/mix-storage";
-import type { MixRecord } from "@/lib/types";
+import { publicUserId, readLocalMixes } from "@/components/mix-storage";
+import type { MixRecord, PublicSession } from "@/lib/types";
 
 export default function HistoryPage() {
   const [mixes, setMixes] = useState<MixRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    const local = readLocalMixes();
-    Promise.resolve().then(() => { setMixes(local); if (local.length) setLoaded(true); });
-    fetch("/api/history").then((value) => value.json()).then(({ mixes: remote }: { mixes: MixRecord[] }) => {
-      const map = new Map([...(remote || []), ...local].map((mix) => [mix.id, mix]));
-      setMixes([...map.values()].sort((a, b) => b.createdAt - a.createdAt));
+    fetch("/api/auth/session").then((value) => value.json() as Promise<PublicSession>).then(async (session) => {
+      const userId = publicUserId(session);
+      const local = readLocalMixes(userId);
+      setMixes(local);
       setLoaded(true);
-    }).catch(() => setLoaded(true));
+      try {
+        const response = await fetch("/api/history");
+        if (!response.ok) return;
+        const { mixes: remote } = await response.json() as { mixes: MixRecord[] };
+        const map = new Map([...(remote || []), ...local].filter((mix) => mix.userId === userId).map((mix) => [mix.id, mix]));
+        setMixes([...map.values()].sort((a, b) => b.createdAt - a.createdAt));
+      } catch { /* Keep this account's browser history if Convex is unavailable. */ }
+    }).catch(() => setMixes([])).finally(() => setLoaded(true));
   }, []);
 
   return (
     <main className="app-shell">
       <AppHeader />
       <section className="history-shell">
-        <div className="app-section-label"><span>YOUR MUSIC / THE ARCHIVE</span><span className="app-label-rule" /></div>
-        <div className="history-heading"><div><p className="app-overline">YOUR LISTENING JOURNAL</p><h1>Past <em>mixes.</em></h1><p>Every idea stays in the crate, whether you saved it to Spotify or kept it here.</p></div><Link className="secondary-button" href="/mix"><Plus size={18} /> New mix</Link></div>
+        <div className="history-heading"><div><h1>Past <em>mixes.</em></h1></div><Link className="secondary-button" href="/mix"><Plus size={18} /> New mix</Link></div>
         {!loaded ? <div className="history-loading" role="status">Opening your crate…</div> : mixes.length ? (
           <div className="history-grid">
             {mixes.map((mix) => (

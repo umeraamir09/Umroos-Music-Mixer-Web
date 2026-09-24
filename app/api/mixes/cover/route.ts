@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeCustomCover } from "@/lib/cover";
 import { saveMix } from "@/lib/history";
-import { getSpotifySession, SESSION_COOKIE, seal, secureCookieOptions } from "@/lib/session";
+import { getSpotifySession, SESSION_COOKIE, seal, secureCookieOptions, spotifyUserId } from "@/lib/session";
 import { refreshSpotifySession, updateSpotifyPlaylistCover } from "@/lib/spotify";
 import type { MixRecord } from "@/lib/types";
 
@@ -14,20 +14,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid playlist art." }, { status: 400 });
     }
     const current = await getSpotifySession();
-    const userId = current?.user.accountId || current?.user.id || "demo";
-    const canPersist = mix.userId === userId || mix.userId === "demo";
-    if (mix.spotifyId && !canPersist) {
+    const userId = current ? spotifyUserId(current) : "demo";
+    if ((mix.userId !== userId && mix.userId !== "demo") || (mix.spotifyId && mix.userId !== userId)) {
       return NextResponse.json({ error: "This mix belongs to another account." }, { status: 403 });
     }
     const jpeg = await normalizeCustomCover(coverDataUrl);
-    const updated = { ...mix, coverDataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}` };
+    const updated = { ...mix, userId, coverDataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}` };
     let session = current;
     if (mix.spotifyId) {
       if (!current) return NextResponse.json({ error: "Connect Spotify to update this playlist cover." }, { status: 401 });
       session = await refreshSpotifySession(current);
       await updateSpotifyPlaylistCover(session, mix.spotifyId, jpeg);
     }
-    if (canPersist) await saveMix(updated).catch(() => null);
+    if (current) await saveMix(userId, updated).catch((error) => console.warn("Mix history update failed after cover change:", error));
     const response = NextResponse.json({ mix: updated });
     if (current && session && session.accessToken !== current.accessToken) {
       response.cookies.set(SESSION_COOKIE, seal(session), { ...secureCookieOptions, maxAge: 60 * 60 * 24 * 30 });

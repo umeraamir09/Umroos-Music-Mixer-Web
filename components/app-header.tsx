@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/logo";
 import { SpotifyIcon } from "@/components/spotify-icon";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { PublicSession } from "@/lib/types";
 
 export function AppHeader({ minimal = false }: { minimal?: boolean }) {
@@ -56,6 +57,7 @@ export function AppHeader({ minimal = false }: { minimal?: boolean }) {
                 <Disc3 size={17} strokeWidth={1.8} aria-hidden="true" /><span>Your mixes</span>
               </Link>
             </nav>
+            <ThemeToggle />
             {session === undefined ? <span className="app-account-loading" aria-hidden="true" /> : session?.authenticated ? (
               <div className="app-account" ref={accountRef}>
                 <button type="button" className="app-account-trigger" aria-label="Account menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>

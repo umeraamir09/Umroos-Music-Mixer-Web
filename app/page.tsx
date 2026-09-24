@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, AudioLines, Check, Disc3 } from "lucide-react";
 import Link from "next/link";
+import { getSpotifySession } from "@/lib/session";
 import { SpotifyIcon } from "@/components/spotify-icon";
 import { LandingMixPreview } from "./landing-mix-preview";
 import styles from "./page.module.css";
@@ -25,8 +27,13 @@ const steps = [
   },
 ];
 
-export default function LandingPage() {
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
+
+export default async function LandingPage() {
   const demo = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+  const authenticated = Boolean(await getSpotifySession());
 
   return (
     <main className={styles.page}>
@@ -40,7 +47,11 @@ export default function LandingPage() {
             <a href="#the-idea">The idea</a>
             <a href="#how-it-works">How it works</a>
           </nav>
-          <a className={styles.headerCta} href="/api/auth/login">Start mixing <ArrowUpRight size={17} strokeWidth={1.8} /></a>
+          {authenticated ? (
+            <Link className={styles.headerCta} href="/mix">Go to app <ArrowRight size={17} strokeWidth={1.8} /></Link>
+          ) : (
+            <a className={styles.headerCta} href="/api/auth/login">Start mixing <ArrowUpRight size={17} strokeWidth={1.8} /></a>
+          )}
         </header>
 
         <section className={styles.hero} aria-labelledby="hero-title">
@@ -50,7 +61,11 @@ export default function LandingPage() {
             <LandingMixPreview />
           </div>
           <div className={styles.heroActions}>
-            <a className={styles.primaryCta} href="/api/auth/login"><SpotifyIcon /> Connect With Spotify <ArrowUpRight size={18} strokeWidth={1.8} /></a>
+            {authenticated ? (
+              <Link className={styles.primaryCta} href="/mix">Go to app <ArrowRight size={18} strokeWidth={1.8} /></Link>
+            ) : (
+              <a className={styles.primaryCta} href="/api/auth/login"><SpotifyIcon /> Connect With Spotify <ArrowUpRight size={18} strokeWidth={1.8} /></a>
+            )}
             {demo && <Link className={styles.secondaryCta} href="/mix">Try the demo <ArrowRight size={18} strokeWidth={1.8} /></Link>}
           </div>
           <p className={styles.heroFootnote}>We use your Spotify taste to shape your mix. Nothing is saved to Spotify until you choose.</p>
@@ -107,7 +122,14 @@ export default function LandingPage() {
         <div className={styles.finalInner}>
           <div className={styles.finalLabel}>THE NEXT TRACK IS YOURS <span>✳</span></div>
           <h2 id="final-title">What are you<br />in the <em>mood</em> for?</h2>
-          <div className={styles.finalActions}><a href="/api/auth/login">Connect with Spotify <ArrowUpRight size={20} strokeWidth={1.7} /></a>{demo && <Link href="/mix">Explore the demo <ArrowRight size={18} /></Link>}</div>
+          <div className={styles.finalActions}>
+            {authenticated ? (
+              <Link href="/mix">Go to app <ArrowRight size={20} strokeWidth={1.7} /></Link>
+            ) : (
+              <a href="/api/auth/login">Connect with Spotify <ArrowUpRight size={20} strokeWidth={1.7} /></a>
+            )}
+            {demo && <Link href="/mix">Explore the demo <ArrowRight size={18} /></Link>}
+          </div>
           <div className={styles.finalRecord} aria-hidden="true"><div /></div>
         </div>
       </section>

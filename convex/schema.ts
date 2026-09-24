@@ -2,6 +2,14 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  profiles: defineTable({
+    spotifyUserId: v.string(),
+    displayName: v.string(),
+    imageUrl: v.optional(v.string()),
+    country: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_spotify_user", ["spotifyUserId"]),
   mixes: defineTable({
     publicId: v.string(),
     userId: v.string(),
@@ -17,7 +25,7 @@ export default defineSchema({
     spotifyId: v.optional(v.string()),
     createdAt: v.number(),
     stats: v.object({ familiar: v.number(), discoveries: v.number(), jevEvaluated: v.number() }),
-  }).index("by_user_created", ["userId", "createdAt"]).index("by_public_id", ["publicId"]),
+  }).index("by_user_created", ["userId", "createdAt"]).index("by_user_public_id", ["userId", "publicId"]),
   // Durable enrichment cache: MusicBrainz allows one request per second, so
   // every track's mbid/genres/tags/features are resolved once and reused.
   // Keys: "sp:{spotifyId}", "ref:{artist}::{title}", "tag:{name}".
