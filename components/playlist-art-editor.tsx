@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Check, Download, Eye, EyeOff, ImagePlus, LockKeyhole, Pencil, Plus, Redo2, RotateCcw, Sticker, Trash2, Type, Undo2, UnlockKeyhole, X } from "lucide-react";
 import Konva from "konva";
 import { Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
-import { readLocalMix, storeLocalMix } from "@/components/mix-storage";
+import { publicUserId, readLocalMix, storeLocalMix } from "@/components/mix-storage";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ART_SIZE, newArtProject, readArtProject, storeArtProject, type ArtEffect, type ArtLayer, type ArtProject } from "@/lib/playlist-art";
 import type { MixRecord } from "@/lib/types";
 import styles from "./playlist-art-editor.module.css";
@@ -122,14 +123,19 @@ export default function PlaylistArtEditor() {
   useEffect(() => {
     let active = true;
     readyRef.current = false;
-    const local = readLocalMix(id);
     const load = async () => {
-      let current = local;
+      let current: MixRecord | null = null;
+      let userId = "demo";
+      try {
+        const response = await fetch("/api/auth/session");
+        userId = publicUserId(await response.json());
+        current = readLocalMix(id, userId);
+      } catch { /* Session errors leave the editor empty. */ }
       if (!current) {
         try {
           const response = await fetch("/api/history");
           const data = await response.json() as { mixes?: MixRecord[] };
-          current = data.mixes?.find((item) => item.id === id) || null;
+          current = data.mixes?.find((item) => item.id === id && item.userId === userId) || null;
         } catch { /* The local crate may still hold this mix. */ }
       }
       let project: ArtProject | undefined;
@@ -321,10 +327,11 @@ export default function PlaylistArtEditor() {
   if (!loaded) return <main className="art-loading" role="status">Opening your art studio…</main>;
   if (!mix) return <main className="art-loading"><p>We couldn&apos;t find this mix.</p><button onClick={() => router.push("/history")}>Back to your mixes</button></main>;
 
-  return <main className={styles.editor}>
+  return <main className={`${styles.editor} app-art-editor`}>
     <header className={styles.header}>
       <div className={styles.headerStart}><button className={styles.iconButton} aria-label="Back to mix" onClick={() => router.push(`/mix/${id}`)}><X size={22} /></button><div><strong>Create your playlist art</strong><span>{mix.name} · {mix.spotifyId ? "Updates Spotify too" : "Ready when you save to Spotify"}</span></div></div>
       <div className={styles.headerActions}>
+        <ThemeToggle />
         <button className={styles.iconButton} onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo"><Undo2 size={20} /></button>
         <button className={styles.iconButton} onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo"><Redo2 size={20} /></button>
         <span className={styles.divider} />

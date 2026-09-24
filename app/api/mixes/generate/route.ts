@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateMix } from "@/lib/mix-engine";
 import { saveMix } from "@/lib/history";
-import { getSpotifySession, SESSION_COOKIE, seal, secureCookieOptions } from "@/lib/session";
+import { getSpotifySession, SESSION_COOKIE, seal, secureCookieOptions, spotifyUserId } from "@/lib/session";
 import { refreshSpotifySession } from "@/lib/spotify";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       session = next;
     }
     const mix = await generateMix(prompt, session);
-    await saveMix(mix).catch(() => null);
+    if (session) await saveMix(spotifyUserId(session), mix);
     const response = NextResponse.json({ mix, mode: session ? "spotify" : "demo" });
     if (session && refreshed) response.cookies.set(SESSION_COOKIE, seal(session), { ...secureCookieOptions, maxAge: 60 * 60 * 24 * 30 });
     return response;

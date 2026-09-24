@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, ViewTransition } from "react";
 import { AppHeader } from "@/components/app-header";
 import { InteractiveCoverArt } from "@/components/interactive-cover-art";
-import { readLocalMix, storeLocalMix } from "@/components/mix-storage";
+import { publicUserId, readLocalMix, storeLocalMix } from "@/components/mix-storage";
 import { useMixTransition } from "@/components/mix-transition-context";
 import { SpotifyIcon } from "@/components/spotify-icon";
 import { TrackArtwork } from "@/components/track-artwork";
@@ -18,27 +18,24 @@ export default function MixResultPage() {
   const router = useRouter();
   const { getPreparedMix, clearPreparedMix } = useMixTransition();
   const [initialMix] = useState(() => getPreparedMix(params.id));
-  const [mix, setMix] = useState<MixRecord | null>(initialMix);
-  const [loaded, setLoaded] = useState(Boolean(initialMix));
+  const [mix, setMix] = useState<MixRecord | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const arriving = initialMix !== null;
   const [session, setSession] = useState<PublicSession | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!initialMix) {
-      const local = readLocalMix(params.id);
-      if (local) {
-        Promise.resolve().then(() => { setMix(local); setLoaded(true); });
-      } else {
-        fetch("/api/history")
-          .then((value) => value.json())
-          .then(({ mixes }: { mixes: MixRecord[] }) => setMix(mixes?.find((item) => item.id === params.id) || null))
-          .catch(() => null)
-          .finally(() => setLoaded(true));
-      }
-    }
-    fetch("/api/auth/session").then((value) => value.json()).then(setSession).catch(() => null);
+    fetch("/api/auth/session").then((value) => value.json() as Promise<PublicSession>).then(async (current) => {
+      setSession(current);
+      const userId = publicUserId(current);
+      if (initialMix && initialMix.userId === userId) { setMix(initialMix); return; }
+      const local = readLocalMix(params.id, userId);
+      if (local) { setMix(local); return; }
+      const response = await fetch("/api/history");
+      const { mixes } = await response.json() as { mixes: MixRecord[] };
+      setMix(mixes?.find((item) => item.id === params.id && item.userId === userId) || null);
+    }).catch(() => setMix(null)).finally(() => setLoaded(true));
   }, [params.id, initialMix]);
 
   useEffect(() => {
@@ -72,7 +69,7 @@ export default function MixResultPage() {
         <div className="result-hero">
           {arriving ? <ViewTransition name="mix-cover-handoff" share="mix-cover-share" default="none"><InteractiveCoverArt src={mix.coverDataUrl} name={mix.name} /></ViewTransition> : <InteractiveCoverArt src={mix.coverDataUrl} name={mix.name} />}
           <ViewTransition enter={arriving ? "mix-title-enter" : "none"} default="none"><div className="result-copy">
-            <span className="result-overline">MADE FOR YOUR MOMENT <i>{mix.status === "saved" ? "SAVED" : "READY TO PREVIEW"}</i></span>
+            <span className="result-overline"> <i>{mix.status === "saved" ? "SAVED" : "READY TO PREVIEW"}</i></span>
             <h1>{mix.name}</h1>
             <p>{mix.description}</p>
             <div className="mix-meta"><span><Clock3 size={16} /> {mix.tracks.length} tracks</span><span><Sparkles size={16} /> {mix.stats.discoveries} discoveries</span></div>

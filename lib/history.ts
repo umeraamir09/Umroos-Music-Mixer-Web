@@ -1,28 +1,24 @@
-import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import { convexService } from "@/lib/convex-service";
 import type { MixRecord } from "@/lib/types";
 
-function client() {
-  const url = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
-  return url ? new ConvexHttpClient(url) : null;
-}
-
-const listRef = makeFunctionReference<"query", { userId: string }, MixRecord[]>("mixes:list");
-const getRef = makeFunctionReference<"query", { id: string; userId: string }, MixRecord | null>("mixes:getByPublicId");
-const upsertRef = makeFunctionReference<"mutation", { mix: MixRecord }, string>("mixes:upsert");
+const listRef = makeFunctionReference<"query", { userId: string; serviceSecret: string }, MixRecord[]>("mixes:list");
+const getRef = makeFunctionReference<"query", { id: string; userId: string; serviceSecret: string }, MixRecord | null>("mixes:getByPublicId");
+const upsertRef = makeFunctionReference<"mutation", { mix: MixRecord; userId: string; serviceSecret: string }, string>("mixes:upsert");
 
 export async function listMixes(userId: string) {
-  const convex = client();
-  return convex ? convex.query(listRef, { userId }) : [];
+  const service = convexService();
+  return service ? service.client.query(listRef, { userId, serviceSecret: service.serviceSecret }) : [];
 }
 
 export async function getMix(id: string, userId: string) {
-  const convex = client();
-  return convex ? convex.query(getRef, { id, userId }) : null;
+  const service = convexService();
+  return service ? service.client.query(getRef, { id, userId, serviceSecret: service.serviceSecret }) : null;
 }
 
-export async function saveMix(mix: MixRecord) {
-  const convex = client();
-  if (!convex) return null;
-  return convex.mutation(upsertRef, { mix });
+export async function saveMix(userId: string, mix: MixRecord) {
+  if (mix.userId !== userId) throw new Error("Mix owner does not match the current account");
+  const service = convexService();
+  if (!service) return null;
+  return service.client.mutation(upsertRef, { mix, userId, serviceSecret: service.serviceSecret });
 }

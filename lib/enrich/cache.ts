@@ -6,8 +6,8 @@
 // metadata are paid once per track, not once per mix. Reads and writes are
 // best-effort: a cache outage must never fail mix generation.
 
-import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import { convexService } from "@/lib/convex-service";
 import type { MixTrack } from "@/lib/types";
 import { chunk } from "@/lib/utils";
 
@@ -34,13 +34,8 @@ export type CacheEntry = {
 
 const memory = new Map<string, CacheEntry>();
 
-const getRef = makeFunctionReference<"query", { keys: string[] }, CacheEntry[]>("enrichmentCache:getMany");
-const putRef = makeFunctionReference<"mutation", { entries: CacheEntry[] }, number>("enrichmentCache:putMany");
-
-function convex(): ConvexHttpClient | null {
-  const url = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
-  return url ? new ConvexHttpClient(url) : null;
-}
+const getRef = makeFunctionReference<"query", { keys: string[]; serviceSecret: string }, CacheEntry[]>("enrichmentCache:getMany");
+const putRef = makeFunctionReference<"mutation", { entries: CacheEntry[]; serviceSecret: string }, number>("enrichmentCache:putMany");
 
 function fresh(entry: CacheEntry | undefined | null): CacheEntry | null {
   if (!entry?.updatedAt) return null;
@@ -61,9 +56,9 @@ export async function getCache(keys: string[]): Promise<Map<string, CacheEntry>>
     else missing.push(key);
   }
   if (missing.length) {
-    const client = convex();
-    if (client) {
-      const results = await Promise.allSettled(chunk(missing, 100).map((keys) => client.query(getRef, { keys })));
+    const service = convexService();
+    if (service) {
+      const results = await Promise.allSettled(chunk(missing, 100).map((keys) => service.client.query(getRef, { keys, serviceSecret: service.serviceSecret })));
       for (const result of results) {
         if (result.status === "fulfilled") {
           for (const row of result.value) {
@@ -87,9 +82,9 @@ export async function putCache(entries: CacheEntry[]): Promise<void> {
   if (!entries.length) return;
   const stamped = entries.map((entry) => ({ ...entry, updatedAt: entry.updatedAt || Date.now() }));
   for (const entry of stamped) memory.set(entry.key, entry);
-  const client = convex();
-  if (client) {
-    const results = await Promise.allSettled(chunk(stamped, 50).map((group) => client.mutation(putRef, { entries: group })));
+  const service = convexService();
+  if (service) {
+    const results = await Promise.allSettled(chunk(stamped, 50).map((group) => service.client.mutation(putRef, { entries: group, serviceSecret: service.serviceSecret })));
     for (const result of results) {
       if (result.status === "rejected") console.warn("Enrichment cache write failed:", result.reason instanceof Error ? result.reason.message : result.reason);
     }

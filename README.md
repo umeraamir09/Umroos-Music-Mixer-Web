@@ -21,7 +21,8 @@ Copy `.env.example` to `.env.local` and fill in the services you want to exercis
 | --- | --- |
 | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI` | Spotify OAuth for taste retrieval and playlist saving. |
 | `SESSION_SECRET` | Seals the encrypted session cookie. |
-| `CONVEX_URL` / `NEXT_PUBLIC_CONVEX_URL` | Convex deployment: mix history and the durable enrichment cache. |
+| `CONVEX_URL` / `NEXT_PUBLIC_CONVEX_URL` | Convex deployment: Spotify profiles, account-scoped mix history, and the shared enrichment cache. |
+| `CONVEX_SERVICE_SECRET` | Random 32+ character secret set to the same value in the Next.js server and the Convex deployment. Keep it out of `NEXT_PUBLIC_` variables. |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_GATEWAY_ID` | GLM-4.7-Flash planning and cover generation. |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Fast primary planner with Cloudflare GLM as fallback. The same Groq key transcribes voice prompts using `whisper-large-v3-turbo`. |
 | `OPENCODE_API_KEY`, `TYPESAFE_API_KEY` | Jev evaluation chain (OpenCode Zen first, official TypeSafe second). |
@@ -31,6 +32,8 @@ Copy `.env.example` to `.env.local` and fill in the services you want to exercis
 | `ENRICH_MAX_TRACKS` | Optional cap on candidates enriched per run; default is no limit. |
 
 ReccoBeats and MusicBrainz need no credentials at all.
+
+Spotify login creates or updates a Convex profile. Signed-in mix history is keyed by the Spotify account, while demo history remains in that browser. The enrichment cache is shared because it stores provider metadata keyed by track, reference, or tag. Its Convex functions require the server secret, as do profile and mix functions. Set the service secret in both environments before deploying the new Convex functions; existing mix rows remain associated with their current Spotify IDs.
 
 ## The low-cost AI pipeline
 

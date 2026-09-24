@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireServiceSecret } from "./access";
 
 const entryValidator = v.object({
   key: v.string(),
@@ -16,8 +17,9 @@ const entryValidator = v.object({
 
 /** Batch point lookups for enrichment entries (single round trip). */
 export const getMany = query({
-  args: { keys: v.array(v.string()) },
-  handler: async (ctx, { keys }) => {
+  args: { keys: v.array(v.string()), serviceSecret: v.string() },
+  handler: async (ctx, { keys, serviceSecret }) => {
+    requireServiceSecret(serviceSecret);
     const rows = await Promise.all(
       keys.map((key) => ctx.db.query("enrichmentCache").withIndex("by_key", (q) => q.eq("key", key)).unique()),
     );
@@ -27,8 +29,9 @@ export const getMany = query({
 
 /** Upsert enrichment entries; each entry is fully replaced (last write wins). */
 export const putMany = mutation({
-  args: { entries: v.array(entryValidator) },
-  handler: async (ctx, { entries }) => {
+  args: { entries: v.array(entryValidator), serviceSecret: v.string() },
+  handler: async (ctx, { entries, serviceSecret }) => {
+    requireServiceSecret(serviceSecret);
     for (const entry of entries) {
       const existing = await ctx.db.query("enrichmentCache").withIndex("by_key", (q) => q.eq("key", entry.key)).unique();
       if (existing) await ctx.db.replace(existing._id, entry);
