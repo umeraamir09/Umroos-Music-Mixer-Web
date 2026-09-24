@@ -536,8 +536,13 @@ a {
   cursor: pointer;
 }
 
-.mic-button:hover {
+.mic-button:hover:not(:disabled) {
   background: var(--ds-blush);
+}
+
+.mic-button:disabled {
+  cursor: wait;
+  opacity: .55;
 }
 
 .mic-button.listening {
