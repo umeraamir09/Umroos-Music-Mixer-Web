@@ -14,6 +14,9 @@ export async function POST(request: NextRequest) {
     const session = await refreshSpotifySession(current);
     const { mix } = await request.json() as { mix: MixRecord };
     if (!mix?.tracks?.length) return NextResponse.json({ error: "No playlist tracks were provided." }, { status: 400 });
+    if (mix.userId === "demo" || mix.tracks.some((track) => track.source === "demo")) {
+      return NextResponse.json({ error: "Demo mixes use sample tracks and cannot be saved to Spotify. Make a new mix after connecting." }, { status: 400 });
+    }
     const userId = spotifyUserId(session);
     if (mix.userId !== userId && mix.userId !== "demo") {
       return NextResponse.json({ error: "This mix belongs to another account." }, { status: 403 });

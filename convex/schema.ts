@@ -41,4 +41,13 @@ export default defineSchema({
     tried: v.optional(v.object({ lastfm: v.optional(v.boolean()), lastfmMbid: v.optional(v.boolean()), musicbrainz: v.optional(v.boolean()) })),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+  demoQuotas: defineTable({
+    bucket: v.string(),
+    count: v.number(),
+  }).index("by_bucket", ["bucket"]),
+  accessRequests: defineTable({
+    email: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_email", ["email"]),
 });

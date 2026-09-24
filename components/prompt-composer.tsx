@@ -7,6 +7,8 @@ import { storeLocalMix } from "@/components/mix-storage";
 import { useMixTransition } from "@/components/mix-transition-context";
 import { TimeGreeting } from "@/components/time-greeting";
 import type { MixRecord } from "@/lib/types";
+import type { PublicSession } from "@/lib/types";
+import { getTurnstileToken } from "@/lib/turnstile-client";
 
 const promptSuggestions = [
   "Late-night R&B with familiar voices and a few new finds.",
@@ -41,6 +43,7 @@ export function PromptComposer() {
   const router = useRouter();
   const { prepareMix } = useMixTransition();
   const [prompt, setPrompt] = useState("");
+  const [session, setSession] = useState<PublicSession | null | undefined>(undefined);
   const [submittedPrompt, setSubmittedPrompt] = useState("");
   const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [error, setError] = useState("");
@@ -61,6 +64,10 @@ export function PromptComposer() {
   const isGenerating = phase !== "idle";
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  useEffect(() => {
+    fetch("/api/auth/session").then((response) => response.json() as Promise<PublicSession>).then(setSession).catch(() => setSession(null));
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -136,7 +143,7 @@ export function PromptComposer() {
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     const requestedPrompt = prompt.trim();
-    if (requestedPrompt.length < 3 || requestRef.current || voicePhase !== "idle") return;
+    if (requestedPrompt.length < 3 || requestRef.current || voicePhase !== "idle" || session === undefined) return;
 
     const controller = new AbortController();
     requestRef.current = controller;
@@ -148,10 +155,11 @@ export function PromptComposer() {
     const began = performance.now();
 
     try {
+      const turnstileToken = session?.authenticated ? undefined : await getTurnstileToken("demo_generate");
       const response = await fetch("/api/mixes/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: requestedPrompt }),
+        body: JSON.stringify({ prompt: requestedPrompt, turnstileToken }),
         signal: controller.signal,
       });
       const data = await response.json();
@@ -273,6 +281,7 @@ export function PromptComposer() {
       <div className="prompt-intro" aria-hidden={isGenerating}>
         <TimeGreeting />
       </div>
+      {session !== undefined && !session?.authenticated && <p className="demo-disclosure">Public demo · {session?.demoCatalog === "spotify" ? "Live Spotify catalog" : "Sample catalog (add Spotify credentials for live search)"} · 3 mixes per visitor each day. Personal taste and Spotify saving require an invite.</p>}
       <div className="composer-shell">
         <div className="mixer-shape-stage">
           <ViewTransition name={isGenerating ? "mix-cover-handoff" : "mix-prompt-idle"} share={isGenerating ? "mix-cover-share" : "none"} default="none"><form onSubmit={submit} className={`composer-card mixer-shape ${phase === "morphing" ? "is-morphing" : ""} ${phase === "looping" ? "is-looping" : ""}`}>
@@ -282,8 +291,8 @@ export function PromptComposer() {
               <div className="composer-bottom">
                 {prompt.length > 1000 && <span className="composer-count">{1200 - prompt.length} characters left</span>}
                 <div className="composer-actions">
-                  <button type="button" onClick={() => void speech()} disabled={isGenerating || voicePhase === "requesting" || voicePhase === "transcribing"} className={`mic-button ${voicePhase === "recording" ? "listening" : ""}`} aria-label={voicePhase === "recording" ? "Stop voice recording" : "Record voice prompt"} aria-pressed={voicePhase === "recording"}><Mic size={21} strokeWidth={1.8} aria-hidden="true" /></button>
-                  <button type="submit" disabled={isGenerating || voicePhase !== "idle" || prompt.trim().length < 3} className="submit-button" aria-label="Make my mix"><ArrowUp size={23} strokeWidth={1.9} aria-hidden="true" /></button>
+                  {session?.authenticated && <button type="button" onClick={() => void speech()} disabled={isGenerating || voicePhase === "requesting" || voicePhase === "transcribing"} className={`mic-button ${voicePhase === "recording" ? "listening" : ""}`} aria-label={voicePhase === "recording" ? "Stop voice recording" : "Record voice prompt"} aria-pressed={voicePhase === "recording"}><Mic size={21} strokeWidth={1.8} aria-hidden="true" /></button>}
+                  <button type="submit" disabled={session === undefined || isGenerating || voicePhase !== "idle" || prompt.trim().length < 3} className="submit-button" aria-label="Make my mix"><ArrowUp size={23} strokeWidth={1.9} aria-hidden="true" /></button>
                 </div>
               </div>
             </div>

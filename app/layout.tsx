@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, Pixelify_Sans } from "next/font/google";
 import { MixTransitionProvider } from "@/components/mix-transition-context";
+import { SpotifyAccessDialog } from "@/components/spotify-access-dialog";
 import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -50,5 +51,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" data-scroll-behavior="smooth" className={`${dmSans.variable} ${pixelifySans.variable}`}><body><MixTransitionProvider>{children}</MixTransitionProvider></body></html>;
+  return <html lang="en" data-scroll-behavior="smooth" className={`${dmSans.variable} ${pixelifySans.variable}`}><body><SpotifyAccessDialog><MixTransitionProvider>{children}</MixTransitionProvider></SpotifyAccessDialog></body></html>;
 }

@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     if (!mix?.id || !Array.isArray(mix.tracks) || typeof coverDataUrl !== "string" || coverDataUrl.length > 8_000_000) {
       return NextResponse.json({ error: "Invalid playlist art." }, { status: 400 });
     }
+    if (mix.userId === "demo") return NextResponse.json({ error: "Demo artwork is saved in your browser." }, { status: 403 });
     const current = await getSpotifySession();
     const userId = current ? spotifyUserId(current) : "demo";
     if ((mix.userId !== userId && mix.userId !== "demo") || (mix.spotifyId && mix.userId !== userId)) {

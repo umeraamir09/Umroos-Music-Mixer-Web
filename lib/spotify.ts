@@ -4,6 +4,37 @@ import { artistSearchQueries, matchesArtistConstraints } from "@/lib/artist-cons
 import { albumKey } from "@/lib/prompt-plan";
 
 const API = "https://api.spotify.com/v1";
+const market = encodeURIComponent(process.env.SPOTIFY_MARKET || "US");
+let appToken: { value: string; expiresAt: number } | null = null;
+let pendingAppToken: Promise<string> | null = null;
+
+export function hasSpotifyAppCredentials() {
+  return Boolean(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+}
+
+/** Catalog-only token. It cannot read a listener's library or write playlists. */
+export async function getSpotifyAppToken(): Promise<string> {
+  if (appToken && appToken.expiresAt > Date.now() + 60_000) return appToken.value;
+  if (!hasSpotifyAppCredentials()) throw new Error("Spotify catalog credentials are not configured.");
+  pendingAppToken ??= (async () => {
+    const response = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ grant_type: "client_credentials" }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`Spotify catalog authorization failed (${response.status}).`);
+    const data = await response.json() as { access_token?: string; expires_in?: number };
+    if (!data.access_token || !data.expires_in) throw new Error("Spotify returned an invalid catalog token.");
+    appToken = { value: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
+    return appToken.value;
+  })().finally(() => { pendingAppToken = null; });
+  return pendingAppToken;
+}
 
 type SpotifyTrack = {
   id: string;
@@ -133,7 +164,7 @@ export async function searchSpotifyCandidates(
     { tracks: { items: [], next: null } },
     () => controller.signal.aborted
       ? Promise.resolve({ tracks: { items: [], next: null } })
-      : spotifyFetch(token, `/search?type=track&limit=10&offset=${page * 10}&q=${encodeURIComponent(query)}`,
+      : spotifyFetch(token, `/search?type=track&limit=10&offset=${page * 10}&market=${market}&q=${encodeURIComponent(query)}`,
         { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) }),
   );
   try {
@@ -164,7 +195,7 @@ export async function getPreferredAlbumCandidates(token: string, plan: MixPlan):
     for (const variant of variants) {
       const query = `album:"${variant.replace(/"/g, "")}"${artist ? ` artist:"${artist.replace(/"/g, "")}"` : ""}`;
       const response = await safe<{ albums?: { items?: SpotifyAlbum[] } }>({}, () =>
-        spotifyFetch(token, `/search?type=album&limit=10&q=${encodeURIComponent(query)}`,
+        spotifyFetch(token, `/search?type=album&limit=10&market=${market}&q=${encodeURIComponent(query)}`,
           { signal: AbortSignal.timeout(8000) }),
       );
       const hit = response.albums?.items?.find((album) => album?.id && albumKey(album.name) === albumKey(title)
@@ -179,7 +210,7 @@ export async function getPreferredAlbumCandidates(token: string, plan: MixPlan):
     for (let offset = 0; offset < 200; offset += 50) {
       const page = await safe<{ items: Omit<SpotifyTrack, "album">[]; next?: string | null }>(
         { items: [], next: null },
-        () => spotifyFetch(token, `/albums/${encodeURIComponent(album.id)}/tracks?limit=50&offset=${offset}`,
+        () => spotifyFetch(token, `/albums/${encodeURIComponent(album.id)}/tracks?limit=50&offset=${offset}&market=${market}`,
           { signal: AbortSignal.timeout(8000) }),
       );
       tracks.push(...page.items.map((item) => ({ ...item, album: album as SpotifyTrack["album"] }))
@@ -219,7 +250,7 @@ export async function getTasteCandidates(session: SpotifySession, plan: MixPlan,
     // catalog to select for vibe, rather than filling from unrelated taste data.
     for (let offset = 0; offset < perQuery; offset += 10) {
       const result = await safe<{ tracks: { items: SpotifyTrack[]; next?: string | null } }>({ tracks: { items: [], next: null } }, () =>
-        spotifyFetch(token, `/search?type=track&limit=10&offset=${offset}&q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(8000) }),
+        spotifyFetch(token, `/search?type=track&limit=10&offset=${offset}&market=${market}&q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(8000) }),
       );
       tracks.push(...result.tracks.items.filter(availableTrack).map((track) => toMixTrack(track, "search", false)));
       if (result.tracks.next === null || result.tracks.items.length < 10) break;
@@ -270,7 +301,7 @@ export async function resolveSpotifyIdentity(
   try {
     const result = await spotifyFetch<{ tracks?: { items?: SpotifyTrack[] } }>(
       accessToken,
-      `/search?type=track&limit=1&q=${encodeURIComponent(query)}`,
+      `/search?type=track&limit=1&market=${market}&q=${encodeURIComponent(query)}`,
       { signal: AbortSignal.timeout(8000) },
     );
     const hit = result.tracks?.items?.[0];
@@ -297,7 +328,7 @@ export async function fetchCatalogTracks(accessToken: string, ids: string[]): Pr
   try {
     results = await mapConcurrent([...new Set(ids.filter(Boolean))], 6, async (id) =>
       controller.signal.aborted ? null : safe<SpotifyTrack | null>(null, () =>
-        spotifyFetch<SpotifyTrack>(accessToken, `/tracks/${encodeURIComponent(id)}`,
+        spotifyFetch<SpotifyTrack>(accessToken, `/tracks/${encodeURIComponent(id)}?market=${market}`,
           { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) }),
       ),
     );

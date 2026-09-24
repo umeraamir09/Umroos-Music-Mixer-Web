@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, AudioLines, Check, Disc3 } fr
 import Link from "next/link";
 import { getSpotifySession } from "@/lib/session";
 import { SpotifyIcon } from "@/components/spotify-icon";
+import { hasSpotifyAppCredentials } from "@/lib/spotify";
 import { LandingMixPreview } from "./landing-mix-preview";
 import styles from "./page.module.css";
 
@@ -10,7 +11,7 @@ const steps = [
   {
     number: "01",
     title: "Bring your taste",
-    description: "Connect Spotify so the mixer can get to know the music you already love.",
+    description: "Invited listeners connect Spotify for mixes shaped by their own library. Everyone can try a catalog-based demo.",
     icon: Disc3,
   },
   {
@@ -22,7 +23,7 @@ const steps = [
   {
     number: "03",
     title: "Make it yours",
-    description: "Preview your new mix, then save it to Spotify when it feels right.",
+    description: "Preview your mix. Invited listeners can save it to Spotify; demo visitors can export the track list.",
     icon: Check,
   },
 ];
@@ -33,6 +34,7 @@ export const metadata: Metadata = {
 
 export default async function LandingPage() {
   const demo = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+  const catalogDemo = hasSpotifyAppCredentials();
   const authenticated = Boolean(await getSpotifySession());
 
   return (
@@ -68,7 +70,7 @@ export default async function LandingPage() {
             )}
             {demo && <Link className={styles.secondaryCta} href="/mix">Try the demo <ArrowRight size={18} strokeWidth={1.8} /></Link>}
           </div>
-          <p className={styles.heroFootnote}>We use your Spotify taste to shape your mix. Nothing is saved to Spotify until you choose.</p>
+          <p className={styles.heroFootnote}>Try the public demo with {catalogDemo ? "Spotify's live catalog" : "a sample catalog"}. Spotify personalization is available to invited accounts, and nothing is saved until you choose.</p>
         </section>
 
         <div className={styles.heroTicker} aria-hidden="true">
@@ -133,7 +135,7 @@ export default async function LandingPage() {
           <div className={styles.finalRecord} aria-hidden="true"><div /></div>
         </div>
       </section>
-      <footer className={styles.footer}><span>© {new Date().getFullYear()} Umroo&apos;s Music Mixer</span><span>Made for the way you listen <span aria-hidden="true">✳</span></span><a href="#hero-title">Back to top ↑</a></footer>
+      <footer className={styles.footer}><span>© {new Date().getFullYear()} Umroo&apos;s Music Mixer</span><span>Made for the way you listen <span aria-hidden="true">✳</span></span><Link href="/privacy">Privacy</Link><a href="#hero-title">Back to top ↑</a></footer>
     </main>
   );
 }

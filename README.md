@@ -1,6 +1,6 @@
 # Umroo's Music Mixer
 
-An AI playlist maker that turns plain-language intent into a Spotify-ready mix shaped around the listener's own history. The app is built with Next.js, Tailwind CSS, Convex, Vercel AI SDK, TypeSafe AI's Jev, Cloudflare Workers AI (GLM-4.7-Flash planning with a Groq GPT-OSS-120B fallback), Spotify Web API, deterministic track enrichment from ReccoBeats, Last.fm, and MusicBrainz, and cover generation on Cloudflare Workers AI.
+An AI playlist maker that turns plain-language intent into a Spotify-ready mix shaped around the listener's own history. The app is built with Next.js, Tailwind CSS, Convex, Vercel AI SDK, Cloudflare Workers AI (GLM-4.7-Flash planning with a Groq GPT-OSS-120B fallback), Spotify Web API, deterministic track enrichment from ReccoBeats, Last.fm, and MusicBrainz, and cover generation on Cloudflare Workers AI.
 
 ## Run locally
 
@@ -9,7 +9,13 @@ An AI playlist maker that turns plain-language intent into a Spotify-ready mix s
 3. Run the local Convex backend in one terminal with `npm run convex:dev`. Select a local deployment when prompted.
 4. Run the app with `npm run dev` and open `http://127.0.0.1:3000`.
 
-The demo flow works with no external credentials. It uses a seeded catalogue, local fit scoring, generated fallback cover art, and browser history. Provider credentials progressively enable Spotify taste data and saving, GLM-4.7-Flash planning, Jev evaluation through OpenCode Zen (falling back to the official TypeSafe API), Last.fm-powered track enrichment, Cloudflare cover generation, Groq voice prompts, and durable Convex history.
+The public demo uses Spotify's client credentials flow to search its live catalog without asking visitors to log in. It runs the same catalog search, music enrichment, local track scoring, cover generation, and preview pipeline as connected mixes. It cannot read a visitor's library or save a playlist to their account. When Spotify credentials are absent in local development, a seeded catalog keeps the demo usable. Provider credentials progressively enable AI planning, Last.fm enrichment, Cloudflare cover generation, Groq voice prompts for invited users, and durable Convex history. Spotify supplied metadata is scored locally instead of being sent to an AI judge.
+
+For a public deployment, configure a production Convex deployment, `SESSION_SECRET`, and Cloudflare Turnstile site/secret keys. Anonymous generation requires server-side Turnstile verification and uses atomic Convex counters: 3 attempts per visitor and 20 total attempts per UTC day. The visitor identity is stored in a sealed HttpOnly cookie; clearing cookies can reset its individual count, but cannot bypass the global ceiling. Voice transcription requires a Spotify session. Turnstile and quota checks fail closed in production if unavailable.
+
+Set `NEXT_PUBLIC_APP_URL` to the exact public origin, register its hostname in Turnstile, and set `TURNSTILE_HOSTNAMES` to that hostname in production. Keep `localhost` and `127.0.0.1` only in local development. Configure provider-side spending limits as a second ceiling, then deploy the updated Convex schema/functions before sending traffic to the Vercel app. The quotas count attempts, including generations that later fail.
+
+Spotify development mode only permits five allowlisted users. Public visitors see an access request dialog before Spotify login, and can submit an email for manual review or try the demo. Requests are stored in the Convex `accessRequests` table, limited to 30 new addresses per UTC day, and do not send an email or automatically grant access. To invite someone, review that table and add their Spotify account in the Spotify Developer Dashboard. Demo mix pages offer CSV export and browser-local playlist art; sample tracks cannot be saved to Spotify.
 
 Spotify requires the redirect URI to match exactly. Add `http://127.0.0.1:3000/api/auth/callback` to the app's allowlist; current Spotify guidance rejects `http://localhost` for local OAuth.
 
@@ -19,14 +25,14 @@ Copy `.env.example` to `.env.local` and fill in the services you want to exercis
 
 | Variable | Purpose |
 | --- | --- |
-| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI` | Spotify OAuth for taste retrieval and playlist saving. |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `SPOTIFY_MARKET` | Server-side catalog search for the public demo; OAuth for invited users' taste retrieval and playlist saving. The default catalog market is US. |
 | `SESSION_SECRET` | Seals the encrypted session cookie. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET`, `TURNSTILE_HOSTNAMES` | Turnstile challenge for public demo generations and access requests. The server checks the token, action, and deployment-specific hostname. Required in production. |
 | `CONVEX_URL` / `NEXT_PUBLIC_CONVEX_URL` | Convex deployment: Spotify profiles, account-scoped mix history, and the shared enrichment cache. |
 | `CONVEX_SERVICE_SECRET` | Random 32+ character secret set to the same value in the Next.js server and the Convex deployment. Keep it out of `NEXT_PUBLIC_` variables. |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_GATEWAY_ID` | GLM-4.7-Flash planning and cover generation. |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Fast primary planner with Cloudflare GLM as fallback. The same Groq key transcribes voice prompts using `whisper-large-v3-turbo`. |
-| `OPENCODE_API_KEY`, `TYPESAFE_API_KEY` | Jev evaluation chain (OpenCode Zen first, official TypeSafe second). |
-| `JEV_MODEL`, `JEV_OFFICIAL_MODEL`, `JEV_LOGS` | Optional Jev model overrides and request/response logging. |
+| `OPENCODE_API_KEY`, `TYPESAFE_API_KEY`, `JEV_MODEL`, `JEV_OFFICIAL_MODEL`, `JEV_LOGS` | Legacy Jev judge integration; public demo and Spotify-connected generation use local scoring to keep track metadata out of AI model inputs. |
 | `LASTFM_API_KEY` | The one new secret: community tags, vibe summaries, reference similarity, and tag definitions. Without it, the Last.fm tier is skipped and the rest still runs. |
 | `MUSICBRAINZ_AGENT` | Optional custom User-Agent for MusicBrainz (its usage policy asks for a contact). |
 | `ENRICH_MAX_TRACKS` | Optional cap on candidates enriched per run; default is no limit. |
@@ -39,11 +45,11 @@ Spotify login creates or updates a Convex profile. Signed-in mix history is keye
 
 The system deliberately avoids one large "make me a playlist" prompt:
 
-1. **Groq plans once.** GPT-OSS-120B produces a schema-bound plan that extracts hard constraints and search queries. Cloudflare GLM is the fallback, then local heuristics. Explicit counts from 1–200 are preserved.
-2. **Spotify retrieves candidates.** Search is driven by the plan. A bounded sample of Liked Songs spans the listener's library history and is read while planning runs. The current library-contains endpoint checks search results for familiarity, and the supported single-track endpoint verifies ReccoBeats additions. Search continues into deeper pages when the first judged pool is short. Spotify catalog ISRCs and release years are retained as evidence. The no-login demo uses a seeded catalogue.
+1. **Groq plans once.** GPT-OSS-120B produces a schema-bound plan from the user's own prompt. Spotify library data is not sent to an AI provider. Cloudflare GLM is the fallback, then local heuristics. Explicit counts from 1–200 are preserved.
+2. **Spotify retrieves candidates.** Search is driven by the plan. The public demo uses a server-side application token and a configured market for Spotify catalog search. For invited listeners, a bounded sample of Liked Songs spans their library history and library-contains checks mark familiar tracks. The supported single-track endpoint verifies ReccoBeats additions. Search continues into deeper pages when the first judged pool is short. Spotify catalog ISRCs and release years are retained as evidence. Local development without Spotify credentials uses the seeded catalog.
 3. **Music APIs add targeted evidence.** ReccoBeats batches full audio analysis and supplies recommendations. Last.fm supplies community tags, a short summary, similarity to reference recordings, and definitions for plan terms. MusicBrainz resolves a bounded set of recordings where genre evidence is missing. Provider work respects a generation budget, and results are cached in Convex.
-4. **Jev decides in batches.** One shared compact state contains the request, plan, and 60 enriched candidate summaries (audio analysis, genre/mood tags, vibe summary, reference similarity — never popularity or play counts). Sixty typed yes/no questions ask whether each indexed candidate belongs. That structure reuses the prompt context instead of paying for one request per track. OpenCode Zen serves these calls with the free `jev-1.13-free` model, falling back to the official TypeSafe API when OpenCode fails.
-5. **Code assembles the mix.** Probability ranking, deduplication, anchor-artist weighting, familiarity quota, and artist-run sequencing are deterministic. Jev never invents songs and cannot bypass a hard constraint.
+4. **Code scores candidates.** Local fit rules evaluate enriched tracks and enforce artist, album, clean-content, energy, and library constraints without sending Spotify track data to an AI model.
+5. **Code assembles the mix.** Probability ranking, deduplication, anchor-artist weighting, familiarity quota, and artist-run sequencing are deterministic.
 6. **Cover generation overlaps selection.** Cloudflare SDXL-Lightning receives one short visual prompt while music retrieval and judging proceed. Sharp applies the readability overlay, playlist name, and watermark. Spotify is only mutated when the listener approves the preview.
 
 Generation logs stage durations and the requested versus selected count as `[mix.generate]` for live performance diagnosis. If fewer recordings pass the request, the preview shows the shortfall.

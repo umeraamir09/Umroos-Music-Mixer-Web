@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSpotifySession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,6 +16,9 @@ const audioFormats: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
+  if (!await getSpotifySession()) {
+    return NextResponse.json({ error: "Voice prompts are available to invited Spotify users. Type a prompt to try the demo." }, { status: 403 });
+  }
   const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json({ error: "Voice input needs a Groq API key. Add GROQ_API_KEY to .env.local." }, { status: 503 });

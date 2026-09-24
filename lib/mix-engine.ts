@@ -4,7 +4,7 @@ import { attachReferenceQueries, enrichCandidates, expandWithRecommendations, ga
 import { matchesArtistConstraints } from "@/lib/artist-constraints";
 import { createMixPlan } from "@/lib/planner";
 import { chooseTracks, scoreCandidates } from "@/lib/selector";
-import { getLikedTracksPreview, getLikedTracksSample, getPreferredAlbumCandidates, markLibraryMembership, searchSpotifyCandidates, summarizeTaste } from "@/lib/spotify";
+import { getLikedTracksPreview, getLikedTracksSample, getPreferredAlbumCandidates, getSpotifyAppToken, hasSpotifyAppCredentials, markLibraryMembership, searchSpotifyCandidates } from "@/lib/spotify";
 import { albumKey } from "@/lib/prompt-plan";
 import type { EnrichContext, MixPlan, MixRecord, MixTrack, SpotifySession } from "@/lib/types";
 import { dedupeBy, stableId } from "@/lib/utils";
@@ -43,6 +43,8 @@ function firstPass(candidates: MixTrack[], liked: MixTrack[], plan: MixPlan, pro
 export async function generateMix(prompt: string, session: SpotifySession | null): Promise<MixRecord> {
   const startedAt = Date.now();
   const deadlineAt = Date.now() + 120_000;
+  const catalogToken = session?.accessToken || (hasSpotifyAppCredentials() ? await getSpotifyAppToken() : null);
+  if (!catalogToken && process.env.NODE_ENV === "production") throw new Error("Spotify catalog credentials are not configured for the public demo.");
   const preview = session ? await getLikedTracksPreview(session.accessToken).catch(() => null) : null;
   const previewTracks = session && preview ? await getLikedTracksSample(session.accessToken, preview, 1) : [];
   const tasteMs = Date.now() - startedAt;
@@ -52,7 +54,8 @@ export async function generateMix(prompt: string, session: SpotifySession | null
     ? getLikedTracksSample(session.accessToken, preview, 8)
     : Promise.resolve(previewTracks);
   const planningStarted = Date.now();
-  const { plan } = await createMixPlan(prompt, previewTracks.length ? summarizeTaste(previewTracks) : undefined);
+  // Spotify supplied library data must stay out of every AI prompt.
+  const { plan } = await createMixPlan(prompt);
   const planningMs = Date.now() - planningStarted;
   const coverPromise = createCover(plan).catch((error) => {
     console.warn("Cover generation failed:", error instanceof Error ? error.message : error);
@@ -68,21 +71,23 @@ export async function generateMix(prompt: string, session: SpotifySession | null
   let retrievedCandidates = 0;
   let resolvedAlbumTracks = 0;
 
-  if (session) {
+  if (catalogToken) {
     const initialQueries = [...plan.searchQueries];
-    const searchBudget = Math.min(400, Math.max(20, plan.targetCount * 3));
+    const searchBudget = session
+      ? Math.min(400, Math.max(20, plan.targetCount * 3))
+      : Math.min(100, Math.max(30, plan.targetCount * 2));
     const [liked, evidence, initialSearch, albumSearch] = await Promise.all([
       likedPromise,
-      gatherReferenceEvidence(plan, session.accessToken, deadlineAt),
-      searchSpotifyCandidates(session.accessToken, initialQueries, searchBudget),
-      getPreferredAlbumCandidates(session.accessToken, plan),
+      gatherReferenceEvidence(plan, catalogToken, deadlineAt),
+      searchSpotifyCandidates(catalogToken, initialQueries, searchBudget),
+      getPreferredAlbumCandidates(catalogToken, plan),
     ]);
     attachReferenceQueries(plan, evidence);
     const additionalQueries = plan.searchQueries.filter((query) => !initialQueries.includes(query));
     const canExpand = Date.now() < deadlineAt - 60_000;
     const [referenceSearch, expanded] = await Promise.all([
-      Date.now() < deadlineAt - 40_000 ? searchSpotifyCandidates(session.accessToken, additionalQueries, 40) : Promise.resolve([]),
-      canExpand && !(plan.preferredAlbums ?? []).length ? expandWithRecommendations(markFamiliar(initialSearch, liked), plan, session.accessToken)
+      Date.now() < deadlineAt - 40_000 ? searchSpotifyCandidates(catalogToken, additionalQueries, 40) : Promise.resolve([]),
+      canExpand && !(plan.preferredAlbums ?? []).length ? expandWithRecommendations(markFamiliar(initialSearch, liked), plan, catalogToken)
         : Promise.resolve(markFamiliar(initialSearch, liked)),
     ]);
     const pool = dedupeBy([
@@ -96,19 +101,19 @@ export async function generateMix(prompt: string, session: SpotifySession | null
     retrievalMs = Date.now() - startedAt - tasteMs - planningMs;
 
     const initial = firstPass(pool, liked, plan, prompt);
-    if (Date.now() < deadlineAt - 30_000) await markLibraryMembership(session.accessToken, initial);
+    if (session && Date.now() < deadlineAt - 30_000) await markLibraryMembership(catalogToken, initial);
     const enrichStarted = Date.now();
     const firstOutcome = await enrichCandidates(initial, plan, evidence, {
       maxNewTracks: initial.length,
       lastfmLimit: Math.min(48, Math.ceil(plan.targetCount * 1.2)),
       musicbrainzLimit: 3,
       deadlineAt,
-      spotifyAccessToken: session.accessToken,
+      spotifyAccessToken: catalogToken,
     });
     enrichmentMs += Date.now() - enrichStarted;
     tagDefinitions = firstOutcome.tagDefinitions;
     const judgeStarted = Date.now();
-    const firstScores = await scoreCandidates(firstOutcome.candidates, plan, prompt, { tagDefinitions });
+    const firstScores = await scoreCandidates(firstOutcome.candidates, plan, prompt, { tagDefinitions }, { localOnly: true });
     judgingMs += Date.now() - judgeStarted;
     scored = firstScores.tracks;
     jevEvaluated = firstScores.jevEvaluated;
@@ -124,7 +129,7 @@ export async function generateMix(prompt: string, session: SpotifySession | null
       const broadQueries = plan.searchQueries.filter((query) => !/\btrack\s*:/i.test(query));
       const stride = Math.max(1, Math.ceil(searchBudget / (10 * Math.max(1, broadQueries.length))));
       const moreSearch = unjudgedSearch.length >= shortage * 3 ? [] : await searchSpotifyCandidates(
-        session.accessToken, plan.searchQueries, Math.max(20, plan.targetCount), stride * (pass + 1),
+        catalogToken, plan.searchQueries, Math.max(20, plan.targetCount), stride * (pass + 1),
       );
       const next = dedupeBy([
         ...markFamiliar(moreSearch, liked),
@@ -133,7 +138,7 @@ export async function generateMix(prompt: string, session: SpotifySession | null
       ].filter((track) => matchesArtistConstraints(track, plan) && !seen.has(trackIdentity(track))), trackIdentity)
         .slice(0, Math.min(200, Math.max(30, plan.targetCount * 2)));
       if (!next.length) break;
-      if (Date.now() < deadlineAt - 30_000) await markLibraryMembership(session.accessToken, next);
+      if (session && Date.now() < deadlineAt - 30_000) await markLibraryMembership(catalogToken, next);
       const refillEnrichStarted = Date.now();
       const outcome = await enrichCandidates(next, plan, evidence, {
         maxNewTracks: next.length,
@@ -141,17 +146,17 @@ export async function generateMix(prompt: string, session: SpotifySession | null
         musicbrainzLimit: 1,
         deadlineAt,
         tagDefinitions,
-        spotifyAccessToken: session.accessToken,
+        spotifyAccessToken: catalogToken,
       });
       enrichmentMs += Date.now() - refillEnrichStarted;
       const refillJudgeStarted = Date.now();
-      const result = await scoreCandidates(outcome.candidates, plan, prompt, { tagDefinitions });
+      const result = await scoreCandidates(outcome.candidates, plan, prompt, { tagDefinitions }, { localOnly: true });
       judgingMs += Date.now() - refillJudgeStarted;
       scored.push(...result.tracks);
       jevEvaluated += result.jevEvaluated;
     }
   } else {
-    const result = await scoreCandidates(demoCatalog, plan, prompt);
+    const result = await scoreCandidates(demoCatalog, plan, prompt, {}, { localOnly: true });
     scored = result.tracks;
     jevEvaluated = result.jevEvaluated;
   }
