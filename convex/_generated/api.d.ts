@@ -11,6 +11,7 @@
 import type * as access from "../access.js";
 import type * as enrichmentCache from "../enrichmentCache.js";
 import type * as mixes from "../mixes.js";
+import type * as portfolio from "../portfolio.js";
 import type * as profiles from "../profiles.js";
 
 import type {
@@ -23,6 +24,7 @@ declare const fullApi: ApiFromModules<{
   access: typeof access;
   enrichmentCache: typeof enrichmentCache;
   mixes: typeof mixes;
+  portfolio: typeof portfolio;
   profiles: typeof profiles;
 }>;
 

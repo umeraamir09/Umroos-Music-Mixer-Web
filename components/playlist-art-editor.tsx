@@ -129,7 +129,7 @@ export default function PlaylistArtEditor() {
       try {
         const response = await fetch("/api/auth/session");
         userId = publicUserId(await response.json());
-        current = readLocalMix(id, userId);
+        current = readLocalMix(id, userId) || (userId !== "demo" ? readLocalMix(id, "demo") : null);
       } catch { /* Session errors leave the editor empty. */ }
       if (!current) {
         try {
@@ -314,6 +314,12 @@ export default function PlaylistArtEditor() {
     setWorking(true); setError(""); setSavedMessage("");
     try {
       const coverDataUrl = exportImage("image/jpeg");
+      if (mix.userId === "demo") {
+        storeLocalMix({ ...mix, coverDataUrl });
+        await storeArtProject(id, doc).catch(() => null);
+        router.push(`/mix/${id}`);
+        return;
+      }
       const response = await fetch("/api/mixes/cover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mix, coverDataUrl }) });
       const data = await response.json() as { mix?: MixRecord; error?: string };
       if (!response.ok || !data.mix) throw new Error(data.error || "Could not set this cover.");
@@ -329,7 +335,7 @@ export default function PlaylistArtEditor() {
 
   return <main className={`${styles.editor} app-art-editor`}>
     <header className={styles.header}>
-      <div className={styles.headerStart}><button className={styles.iconButton} aria-label="Back to mix" onClick={() => router.push(`/mix/${id}`)}><X size={22} /></button><div><strong>Create your playlist art</strong><span>{mix.name} · {mix.spotifyId ? "Updates Spotify too" : "Ready when you save to Spotify"}</span></div></div>
+      <div className={styles.headerStart}><button className={styles.iconButton} aria-label="Back to mix" onClick={() => router.push(`/mix/${id}`)}><X size={22} /></button><div><strong>Create your playlist art</strong><span>{mix.name} · {mix.userId === "demo" ? "Saved in this browser" : mix.spotifyId ? "Updates Spotify too" : "Ready when you save to Spotify"}</span></div></div>
       <div className={styles.headerActions}>
         <ThemeToggle />
         <button className={styles.iconButton} onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo"><Undo2 size={20} /></button>

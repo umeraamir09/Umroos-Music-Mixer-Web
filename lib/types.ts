@@ -109,5 +109,6 @@ export type SpotifySession = {
 export type PublicSession = {
   authenticated: boolean;
   demo: boolean;
+  demoCatalog?: "spotify" | "sample";
   user?: SpotifySession["user"];
 };

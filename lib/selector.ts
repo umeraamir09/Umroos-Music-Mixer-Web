@@ -54,7 +54,10 @@ function localAssessment(track: MixTrack, plan: MixPlan, prompt: string): MixTra
   const artistOnly = plan.allowedArtists.length > 0 && !soundRequested;
   const evidence = reference || similarMatch || clubEvidence
     || ((genreMatch || moodMatch || (explicitEnergy && (energyMatch || energyTagMatch))) && (!explicitEnergy || energyMatch || energyTagMatch));
-  const fits = !energyClashes(track, plan, prompt) && !explicitClashes(track, prompt) && !avoids && clubMatch && (artistOnly || evidence);
+  const hasSonicRequest = requestedGenres.length > 0 || requestedMoods.length > 0 || plan.avoidTraits.length > 0 || explicitEnergy || plan.referenceTracks.length > 0;
+  const anchorMatch = plan.anchorArtists.some((artist) => track.artists.some((credited) => key(credited) === key(artist)));
+  const fits = !energyClashes(track, plan, prompt) && !explicitClashes(track, prompt) && !avoids && clubMatch
+    && (artistOnly || evidence || (!hasSonicRequest && (!soundRequested || anchorMatch)));
   return { ...track, fitProbability: fits ? (reference ? 0.98 : 0.8) : 0, meetsRequest: fits, fitSource: "local" };
 }
 
@@ -150,10 +153,10 @@ async function evaluateBatch(batch: MixTrack[], plan: MixPlan, prompt: string, c
   });
 }
 
-export async function scoreCandidates(candidates: MixTrack[], plan: MixPlan, prompt: string, context: EnrichContext = {}) {
+export async function scoreCandidates(candidates: MixTrack[], plan: MixPlan, prompt: string, context: EnrichContext = {}, options: { localOnly?: boolean } = {}) {
   plan = normalizePlan(plan, prompt);
   const eligible = dedupeBy(candidates.filter((track) => matchesArtistConstraints(track, plan) && matchesAlbumScope(track, plan, prompt) && !energyClashes(track, plan, prompt) && !explicitClashes(track, prompt) && !libraryClashes(track, prompt)), (track) => `${track.name}::${track.artists[0]}`);
-  if (!hasJevProvider()) {
+  if (options.localOnly || !hasJevProvider()) {
     return { tracks: eligible.map((track) => localAssessment(track, plan, prompt)), jevEvaluated: 0 };
   }
 
