@@ -899,6 +899,68 @@ html[data-app-theme="dark"] .app-shell .history-status span.saved {
   color: var(--ds-ink);
 }
 
+.mix-verification {
+  width: min(100%, 480px);
+  margin: 28px auto 0;
+  padding: 26px 24px 22px;
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  background: var(--ds-card);
+  box-shadow: 0 18px 36px rgba(60, 45, 49, .08);
+  text-align: center;
+}
+
+.mix-verification h2 {
+  margin: 10px 0 0;
+  font-size: clamp(28px, 4vw, 38px);
+  line-height: 1.15;
+  letter-spacing: -.05em;
+}
+
+.mix-verification p {
+  margin: 10px 0 0;
+  color: var(--ds-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mix-verification-widget {
+  display: flex;
+  width: 100%;
+  min-height: 72px;
+  align-items: center;
+  justify-content: center;
+  margin: 21px auto 13px;
+}
+
+.mix-verification > button {
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--ds-rule);
+  color: var(--ds-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.mix-verification > button:hover {
+  color: var(--ds-ink);
+  border-bottom-color: var(--ds-ink);
+}
+
+.prompt-stage.is-verifying .prompt-intro,
+.prompt-stage.is-verifying .idea-row {
+  max-height: 0;
+  opacity: 0;
+}
+
+.prompt-stage.is-verifying .composer-shell {
+  margin-top: 0;
+}
+
+.prompt-stage.is-verifying .idea-row {
+  margin-top: 0;
+}
+
 /* The prompt form itself becomes the loading shape. */
 .prompt-stage.is-generating .prompt-intro {
   max-height: 0;

@@ -2,8 +2,9 @@ type TurnstileApi = {
   render: (container: HTMLElement, options: {
     sitekey: string;
     action: string;
+    size?: "flexible";
     execution: "execute";
-    appearance: "interaction-only";
+    appearance: "always" | "interaction-only";
     callback: (token: string) => void;
     "error-callback": () => void;
     "expired-callback": () => void;
@@ -31,35 +32,47 @@ function loadTurnstile() {
   return scriptPromise;
 }
 
-export async function getTurnstileToken(action: "demo_generate" | "access_request") {
+export async function getTurnstileToken(
+  action: "demo_generate" | "access_request",
+  options: { container?: HTMLElement; signal?: AbortSignal } = {},
+) {
+  const { signal } = options;
+  if (signal?.aborted) throw new DOMException("Verification cancelled.", "AbortError");
   const sitekey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   if (!sitekey) {
     if (process.env.NODE_ENV !== "production") return "";
     throw new Error("The demo is temporarily unavailable.");
   }
   const api = await loadTurnstile();
+  if (signal?.aborted) throw new DOMException("Verification cancelled.", "AbortError");
   return new Promise<string>((resolve, reject) => {
-    const container = document.createElement("div");
-    container.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:10000";
-    document.body.appendChild(container);
+    const container = options.container ?? document.createElement("div");
+    if (!options.container) {
+      container.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:10000";
+      document.body.appendChild(container);
+    }
     let widget = "";
     let settled = false;
-    const finish = (token?: string) => {
+    const timeout = options.container ? null : window.setTimeout(() => finish(), 120_000);
+    const finish = (token?: string, error?: Error) => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timeout);
+      if (timeout !== null) window.clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
       if (widget) { try { api.remove(widget); } catch { /* Widget may already be gone. */ } }
-      container.remove();
+      if (!options.container) container.remove();
       if (token) resolve(token);
-      else reject(new Error("Human verification failed. Please retry."));
+      else reject(error ?? new Error("Human verification failed. Please retry."));
     };
-    const timeout = window.setTimeout(() => finish(), 120_000);
+    const onAbort = () => finish(undefined, new DOMException("Verification cancelled.", "AbortError"));
+    signal?.addEventListener("abort", onAbort, { once: true });
     try {
       widget = api.render(container, {
         sitekey,
         action,
+        size: options.container ? "flexible" : undefined,
         execution: "execute",
-        appearance: "interaction-only",
+        appearance: options.container ? "always" : "interaction-only",
         callback: (token) => finish(token),
         "error-callback": () => finish(),
         "expired-callback": () => finish(),

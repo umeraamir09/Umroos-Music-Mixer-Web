@@ -45,6 +45,7 @@ export function PromptComposer() {
   const [prompt, setPrompt] = useState("");
   const [session, setSession] = useState<PublicSession | null | undefined>(undefined);
   const [submittedPrompt, setSubmittedPrompt] = useState("");
+  const [verificationPrompt, setVerificationPrompt] = useState<string | null>(null);
   const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [error, setError] = useState("");
   const [progressIndex, setProgressIndex] = useState(0);
@@ -54,6 +55,9 @@ export function PromptComposer() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [typingFrame, setTypingFrame] = useState<TypingFrame>({ index: 0, length: 0, direction: "typing" });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const verificationHostRef = useRef<HTMLDivElement>(null);
+  const verificationPromptRef = useRef<string | null>(null);
+  const verificationControllerRef = useRef<AbortController | null>(null);
   const promptRef = useRef("");
   const requestRef = useRef<AbortController | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -62,6 +66,8 @@ export function PromptComposer() {
   const recordingTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
   const isGenerating = phase !== "idle";
+  const isVerifying = verificationPrompt !== null;
+  const isBusy = isVerifying || isGenerating;
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -143,8 +149,26 @@ export function PromptComposer() {
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     const requestedPrompt = prompt.trim();
-    if (requestedPrompt.length < 3 || requestRef.current || voicePhase !== "idle" || session === undefined) return;
+    if (requestedPrompt.length < 3 || requestRef.current || verificationPromptRef.current || voicePhase !== "idle" || session === undefined) return;
 
+    setError("");
+    if (!session?.authenticated) {
+      verificationPromptRef.current = requestedPrompt;
+      setVerificationPrompt(requestedPrompt);
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      return;
+    }
+    void generate(requestedPrompt);
+  }
+
+  function cancelVerification() {
+    verificationControllerRef.current?.abort();
+    verificationControllerRef.current = null;
+    verificationPromptRef.current = null;
+    setVerificationPrompt(null);
+  }
+
+  async function generate(requestedPrompt: string, turnstileToken?: string) {
     const controller = new AbortController();
     requestRef.current = controller;
     setError("");
@@ -155,7 +179,6 @@ export function PromptComposer() {
     const began = performance.now();
 
     try {
-      const turnstileToken = session?.authenticated ? undefined : await getTurnstileToken("demo_generate");
       const response = await fetch("/api/mixes/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -183,6 +206,34 @@ export function PromptComposer() {
       if (requestRef.current === controller) requestRef.current = null;
     }
   }
+
+  useEffect(() => {
+    if (verificationPrompt === null || !verificationHostRef.current) return;
+    verificationHostRef.current.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const controller = new AbortController();
+    verificationControllerRef.current = controller;
+    void getTurnstileToken("demo_generate", { container: verificationHostRef.current, signal: controller.signal })
+      .then((token) => {
+        if (controller.signal.aborted) return;
+        verificationPromptRef.current = null;
+        verificationControllerRef.current = null;
+        setVerificationPrompt(null);
+        void generate(verificationPrompt, token);
+      })
+      .catch((reason) => {
+        if (controller.signal.aborted) return;
+        verificationPromptRef.current = null;
+        verificationControllerRef.current = null;
+        setVerificationPrompt(null);
+        setError(reason instanceof Error ? reason.message : "Human verification failed. Please retry.");
+      });
+    return () => {
+      controller.abort();
+      if (verificationControllerRef.current === controller) verificationControllerRef.current = null;
+    };
+    // A verification attempt is tied to the prompt captured when Enter was pressed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verificationPrompt]);
 
   async function transcribe(blob: Blob, format: string) {
     if (!blob.size) {
@@ -277,8 +328,8 @@ export function PromptComposer() {
   }
 
   return (
-    <section className={`prompt-stage ${isGenerating ? "is-generating" : ""}`} aria-label="Make a mix">
-      <div className="prompt-intro" aria-hidden={isGenerating}>
+    <section className={`prompt-stage ${isGenerating ? "is-generating" : ""} ${isVerifying ? "is-verifying" : ""}`} aria-label="Make a mix">
+      <div className="prompt-intro" aria-hidden={isBusy}>
         <TimeGreeting />
       </div>
       {session !== undefined && !session?.authenticated && <p className="demo-disclosure">Public demo · {session?.demoCatalog === "spotify" ? "Live Spotify catalog" : "Sample catalog (add Spotify credentials for live search)"} · 3 mixes per visitor each day. Personal taste and Spotify saving require an invite.</p>}
@@ -287,17 +338,24 @@ export function PromptComposer() {
           <ViewTransition name={isGenerating ? "mix-cover-handoff" : "mix-prompt-idle"} share={isGenerating ? "mix-cover-share" : "none"} default="none"><form onSubmit={submit} className={`composer-card mixer-shape ${phase === "morphing" ? "is-morphing" : ""} ${phase === "looping" ? "is-looping" : ""}`}>
             <div className="composer-content" aria-hidden={isGenerating}>
               <label className="composer-label" htmlFor="mix-prompt">ASK YOUR AI MIXER</label>
-              <textarea id="mix-prompt" ref={textareaRef} value={prompt} onChange={(event) => { changePrompt(event.target.value); setError(""); setSpeechMessage(""); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} disabled={isGenerating} maxLength={1200} placeholder={placeholder} />
+              <textarea id="mix-prompt" ref={textareaRef} value={prompt} onChange={(event) => { changePrompt(event.target.value); setError(""); setSpeechMessage(""); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} disabled={isBusy} maxLength={1200} placeholder={placeholder} />
               <div className="composer-bottom">
                 {prompt.length > 1000 && <span className="composer-count">{1200 - prompt.length} characters left</span>}
                 <div className="composer-actions">
-                  {session?.authenticated && <button type="button" onClick={() => void speech()} disabled={isGenerating || voicePhase === "requesting" || voicePhase === "transcribing"} className={`mic-button ${voicePhase === "recording" ? "listening" : ""}`} aria-label={voicePhase === "recording" ? "Stop voice recording" : "Record voice prompt"} aria-pressed={voicePhase === "recording"}><Mic size={21} strokeWidth={1.8} aria-hidden="true" /></button>}
-                  <button type="submit" disabled={session === undefined || isGenerating || voicePhase !== "idle" || prompt.trim().length < 3} className="submit-button" aria-label="Make my mix"><ArrowUp size={23} strokeWidth={1.9} aria-hidden="true" /></button>
+                  {session?.authenticated && <button type="button" onClick={() => void speech()} disabled={isBusy || voicePhase === "requesting" || voicePhase === "transcribing"} className={`mic-button ${voicePhase === "recording" ? "listening" : ""}`} aria-label={voicePhase === "recording" ? "Stop voice recording" : "Record voice prompt"} aria-pressed={voicePhase === "recording"}><Mic size={21} strokeWidth={1.8} aria-hidden="true" /></button>}
+                  <button type="submit" disabled={session === undefined || isBusy || voicePhase !== "idle" || prompt.trim().length < 3} className="submit-button" aria-label="Make my mix"><ArrowUp size={23} strokeWidth={1.9} aria-hidden="true" /></button>
                 </div>
               </div>
             </div>
           </form></ViewTransition>
         </div>
+        {isVerifying && <div className="mix-verification" aria-labelledby="mix-verification-title">
+          <span className="mix-progress-overline">01 / BEFORE WE BEGIN</span>
+          <h2 id="mix-verification-title">One quick check.</h2>
+          <p role="status">Complete the human verification below. Your mix will start automatically when it succeeds.</p>
+          <div ref={verificationHostRef} className="mix-verification-widget" aria-label="Human verification" />
+          <button type="button" onClick={cancelVerification}>Cancel</button>
+        </div>}
         <div className="mix-progress">
           {isGenerating && <div className="mix-progress-inner">
             <p className="mix-progress-overline">02 / IN THE MAKING</p>
@@ -306,11 +364,11 @@ export function PromptComposer() {
             <p className="mix-progress-prompt"><span>THE FEELING YOU GAVE US</span>“{submittedPrompt}”</p>
           </div>}
         </div>
-        {error && <div className="composer-error" role="alert"><strong>The mix hit a skip.</strong><span>{error}</span><button type="button" onClick={() => void submit()}>Try again <ArrowUpRight size={16} aria-hidden="true" /></button></div>}
-        {speechMessage && !isGenerating && <p className="composer-message" role="status">{speechMessage}</p>}
-        <div className="idea-row" role="group" aria-label="Prompt ideas" aria-hidden={isGenerating}>
+        {error && <div className="composer-error" role="alert"><strong>Let&apos;s try that again.</strong><span>{error}</span><button type="button" onClick={() => void submit()}>Try again <ArrowUpRight size={16} aria-hidden="true" /></button></div>}
+        {speechMessage && !isBusy && <p className="composer-message" role="status">{speechMessage}</p>}
+        <div className="idea-row" role="group" aria-label="Prompt ideas" aria-hidden={isBusy}>
           {ideas.map(({ label, prompt: idea }) => (
-            <button type="button" key={label} disabled={isGenerating} onClick={() => { changePrompt(idea); setSpeechMessage(""); textareaRef.current?.focus(); }} className="idea-chip">{label}<ArrowUpRight size={15} strokeWidth={1.7} aria-hidden="true" /></button>
+            <button type="button" key={label} disabled={isBusy} onClick={() => { changePrompt(idea); setSpeechMessage(""); textareaRef.current?.focus(); }} className="idea-chip">{label}<ArrowUpRight size={15} strokeWidth={1.7} aria-hidden="true" /></button>
           ))}
         </div>
       </div>
