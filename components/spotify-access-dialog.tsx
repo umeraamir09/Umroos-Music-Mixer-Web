@@ -13,8 +13,10 @@ export function SpotifyAccessDialog({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [alreadyRequested, setAlreadyRequested] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -47,7 +49,8 @@ export function SpotifyAccessDialog({ children }: { children: ReactNode }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (status === "sending") return;
+    if (submittingRef.current || status === "sent") return;
+    submittingRef.current = true;
     setError("");
     setStatus("sending");
     try {
@@ -59,10 +62,13 @@ export function SpotifyAccessDialog({ children }: { children: ReactNode }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not send your request.");
+      setAlreadyRequested(data.alreadyRequested === true);
       setStatus("sent");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send your request.");
       setStatus("idle");
+    } finally {
+      submittingRef.current = false;
     }
   }
 
@@ -74,13 +80,14 @@ export function SpotifyAccessDialog({ children }: { children: ReactNode }) {
         <span className="app-overline">SPOTIFY ACCESS</span>
         <h2 id="spotify-access-title">Live Spotify access is invite only.</h2>
         <p>Spotify limits development mode to five approved users. You can request a spot if one is available, or try the public demo now.</p>
-        {status === "sent" ? <p className="spotify-access-success" role="status">Request received. If access becomes available, your email can be added to the Spotify invite list.</p> : <form onSubmit={submit}>
+        {status === "sent" ? <p className="spotify-access-success" role="status">{alreadyRequested ? "This email already has an access request. We'll contact you if a spot becomes available." : "Request received. We emailed you a confirmation and notified the site owner. If access becomes available, your email can be added to the Spotify invite list."}</p> : <form onSubmit={submit}>
           <label htmlFor="spotify-access-email">Email for a possible invite</label>
+          <p className="spotify-access-email-note">Use the email address linked to your Spotify account.</p>
           <div className="spotify-access-form-row">
             <input ref={inputRef} id="spotify-access-email" type="email" required maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
             <button type="submit" disabled={status === "sending"}>{status === "sending" ? "Sending…" : "Request access"}</button>
           </div>
-          <small>Your email is stored only to review this request. Sending it does not grant access automatically. <Link href="/privacy" onClick={() => setOpen(false)}>Privacy details</Link></small>
+          <small>Your email is stored, sent to the site owner for review, and used to send you a confirmation. Sending it does not grant access automatically. <Link href="/privacy" onClick={() => setOpen(false)}>Privacy details</Link></small>
         </form>}
         {error && <p className="spotify-access-error" role="alert">{error}</p>}
         <div className="spotify-access-actions">
