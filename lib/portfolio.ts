@@ -1,11 +1,13 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { makeFunctionReference } from "convex/server";
+import type { Id } from "@/convex/_generated/dataModel";
 import { convexService } from "@/lib/convex-service";
 import { seal, unseal } from "@/lib/session";
 
 export const VISITOR_COOKIE = "umm_demo_visitor";
 const reserveRef = makeFunctionReference<"mutation", { visitor: string; serviceSecret: string }, { allowed: boolean; reason: string; resetAt: number }>("portfolio:reserveDemo");
-const accessRef = makeFunctionReference<"mutation", { email: string; serviceSecret: string }, { accepted: boolean }>("portfolio:requestAccess");
+const accessRef = makeFunctionReference<"mutation", { email: string; serviceSecret: string }, { accepted: boolean; alreadyRequested: boolean; requestId: Id<"accessRequests"> | null; ownerNotified: boolean; requesterNotified: boolean }>("portfolio:requestAccess");
+const markAccessEmailSentRef = makeFunctionReference<"mutation", { requestId: Id<"accessRequests">; recipient: "owner" | "requester"; serviceSecret: string }, null>("portfolio:markAccessRequestEmailSent");
 
 export function demoVisitor(value?: string) {
   const stored = unseal<{ id: string }>(value);
@@ -29,6 +31,12 @@ export async function requestSpotifyAccess(email: string) {
   const service = convexService();
   if (!service) throw new Error("Convex is required for access requests");
   return service.client.mutation(accessRef, { email, serviceSecret: service.serviceSecret });
+}
+
+export async function markSpotifyAccessEmailSent(requestId: Id<"accessRequests">, recipient: "owner" | "requester") {
+  const service = convexService();
+  if (!service) throw new Error("Convex is required for access requests");
+  await service.client.mutation(markAccessEmailSentRef, { requestId, recipient, serviceSecret: service.serviceSecret });
 }
 
 export async function verifyTurnstile(token: unknown, action: string) {
