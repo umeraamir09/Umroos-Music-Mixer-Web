@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "latest",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "ai": "latest",
     "convex": "latest",
     "konva": "^10.7.0",
