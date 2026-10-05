@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, Pixelify_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { MixTransitionProvider } from "@/components/mix-transition-context";
 import { SpotifyAccessDialog } from "@/components/spotify-access-dialog";
 import { siteUrl } from "@/lib/site-url";
@@ -51,5 +53,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" data-scroll-behavior="smooth" className={`${dmSans.variable} ${pixelifySans.variable}`}><body><SpotifyAccessDialog><MixTransitionProvider>{children}</MixTransitionProvider></SpotifyAccessDialog></body></html>;
+  return <html lang="en" data-scroll-behavior="smooth" className={`${dmSans.variable} ${pixelifySans.variable}`}><body><SpotifyAccessDialog><MixTransitionProvider>{children}</MixTransitionProvider></SpotifyAccessDialog><Analytics /><SpeedInsights /></body></html>;
 }
